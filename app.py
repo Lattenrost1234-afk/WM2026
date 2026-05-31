@@ -882,6 +882,32 @@ def check_status(code):
         return jsonify({"status": active_codes[code]["status"]})
     return jsonify({"status": "not_found"})
 
+# Wird vom lokalen watcher.py aufgerufen wenn jemand #verifyWM schreibt
+@app.route('/api/verify', methods=['POST'])
+def api_verify():
+    data = request.get_json()
+    secret = data.get("secret", "")
+    code = data.get("code", "")
+    username = data.get("username", "")
+
+    if secret != "GG_VERIFY_SECRET_2026":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    if code in active_codes and active_codes[code]["status"] == "pending":
+        active_codes[code]["status"] = "verified"
+        active_codes[code]["username"] = username
+        if username not in user_db:
+            user_db[username] = {
+                "points": 1000,
+                "tipps": {},
+                "lieblingsteam": None,
+                "registered": datetime.datetime.now().strftime("%d.%m.%Y")
+            }
+        print(f"[OK] {username} via API verifiziert!")
+        return jsonify({"success": True})
+
+    return jsonify({"error": "Code nicht gefunden"}), 404
+
 @app.route('/login_success/<code>')
 def login_success(code):
     if code in active_codes and active_codes[code]["status"] == "verified":
