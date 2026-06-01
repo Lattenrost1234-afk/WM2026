@@ -42,31 +42,37 @@ app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=30)
 active_codes = {}
 user_db = {}
 live_scores_cache = {}  # spiel_id -> {"heim": x, "gast": y, "status": "live"/"final"/"upcoming"}
+verified_users = set()  # Spieler die bereits verifiziert wurden (für Cookie-Skip)
 
 # ==========================================
 # PERSISTENTER DATENSPEICHER
 # ==========================================
 def save_data():
     """Speichert user_db in JSON-Datei"""
+    global verified_users
     try:
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(user_db, f, ensure_ascii=False, indent=2)
+        verified_users = set(user_db.keys())
     except Exception as e:
         print(f"[FEHLER] Kann Daten nicht speichern: {e}")
 
 def load_data():
     """Lädt user_db aus JSON-Datei"""
-    global user_db
+    global user_db, verified_users
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 user_db = json.load(f)
+            verified_users = set(user_db.keys())  # Alle gespeicherten User sind bereits verifiziert
             print(f"[OK] {len(user_db)} Benutzer geladen aus {DATA_FILE}")
         except Exception as e:
             print(f"[WARN] Kann {DATA_FILE} nicht laden: {e}")
             user_db = {}
+            verified_users = set()
     else:
         user_db = {}
+        verified_users = set()
         print(f"[INFO] Neue Datenbankdatei wird angelegt: {DATA_FILE}")
 
 # Beim Start laden
@@ -603,35 +609,44 @@ threading.Thread(target=minecraft_log_reader, daemon=True).start()
 # ==========================================
 BASE_CSS = """
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&display=swap');
 
   :root {
-    --gold:    #FFD700;
-    --gold2:   #FFA500;
-    --green:   #00E676;
-    --red:     #FF1744;
-    --live:    #FF4444;
-    --live-bg: rgba(255,68,68,0.08);
-    --dark:    #07090F;
-    --dark2:   #0B0E18;
-    --dark3:   #101422;
-    --card:    #0D1120;
-    --card2:   #121829;
-    --border:  rgba(255,215,0,0.12);
-    --border2: rgba(255,255,255,0.06);
-    --text:    #DDE5F5;
-    --muted:   #6B7A99;
+    --gold:    #F5C842;
+    --gold2:   #E8A020;
+    --gold3:   #FFE066;
+    --green:   #22C55E;
+    --green2:  #16A34A;
+    --red:     #EF4444;
+    --live:    #FF3B3B;
+    --live2:   #FF6B6B;
+    --live-bg: rgba(255,59,59,0.06);
+    --upcoming:#3B82F6;
+    --soon:    #F59E0B;
+    --dark:    #080B12;
+    --dark2:   #0C1018;
+    --dark3:   #111520;
+    --dark4:   #161C2D;
+    --card:    #0F1320;
+    --card2:   #141929;
+    --card3:   #192035;
+    --border:  rgba(245,200,66,0.14);
+    --border2: rgba(255,255,255,0.07);
+    --border3: rgba(255,255,255,0.04);
+    --text:    #E8EEFF;
+    --text2:   #B8C4E0;
+    --muted:   #5A6A8A;
     --accent:  #3B82F6;
-    --rank1:   #FFD700;
-    --rank2:   #C0C0C0;
-    --rank3:   #CD7F32;
+    --rank1:   #F5C842;
+    --rank2:   #C0C8D8;
+    --rank3:   #CD8C50;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   html { scroll-behavior: smooth; }
   body {
     background: var(--dark);
     color: var(--text);
-    font-family: 'Barlow', sans-serif;
+    font-family: 'Inter', sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
   }
@@ -639,253 +654,321 @@ BASE_CSS = """
     content:'';
     position: fixed; inset: 0;
     background:
-      radial-gradient(ellipse 80% 50% at 10% 0%, rgba(255,215,0,0.035) 0%, transparent 70%),
-      radial-gradient(ellipse 60% 40% at 90% 100%, rgba(59,130,246,0.04) 0%, transparent 70%);
+      radial-gradient(ellipse 70% 60% at 15% -10%, rgba(245,200,66,0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 50% at 85% 110%, rgba(59,130,246,0.05) 0%, transparent 60%);
     pointer-events: none; z-index:0;
   }
 
-  /* NAVBAR */
+  /* ====== NAVBAR ====== */
   .navbar {
-    position: sticky; top:0; z-index:200;
-    background: rgba(7,9,15,0.92);
-    border-bottom: 1px solid var(--border);
-    backdrop-filter: blur(16px);
-    height: 64px;
+    position: sticky; top:0; z-index:300;
+    background: rgba(8,11,18,0.95);
+    border-bottom: 1px solid var(--border3);
+    backdrop-filter: blur(20px) saturate(1.5);
+    height: 60px;
     display: flex; align-items: center;
-    padding: 0 32px; gap: 24px;
+    padding: 0 28px; gap: 20px;
   }
   .nav-logo {
-    font-family: 'Bebas Neue'; font-size: 22px; letter-spacing: 3px;
-    background: linear-gradient(90deg, var(--gold), var(--gold2));
+    font-family: 'Bebas Neue'; font-size: 20px; letter-spacing: 4px;
+    background: linear-gradient(90deg, var(--gold3), var(--gold2));
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    white-space: nowrap;
+    white-space: nowrap; flex-shrink:0;
   }
-  .nav-sep { width:1px; height:28px; background: var(--border2); }
-  .nav-links { display:flex; gap:4px; flex:1; }
+  .nav-sep { width:1px; height:24px; background: var(--border3); flex-shrink:0; }
+  .nav-links { display:flex; gap:2px; flex:1; }
   .nav-link {
-    padding: 6px 14px; border-radius: 6px; text-decoration: none;
-    font-family: 'Barlow Condensed'; font-weight: 700; font-size: 15px;
-    letter-spacing: 0.5px; color: var(--muted); transition: all 0.15s;
+    padding: 5px 12px; border-radius: 6px; text-decoration: none;
+    font-weight: 600; font-size: 13px; letter-spacing: 0.2px;
+    color: var(--muted); transition: all 0.15s;
   }
-  .nav-link:hover { color: var(--text); background: var(--dark3); }
-  .nav-link.active { color: var(--gold); background: rgba(255,215,0,0.08); }
-  .nav-right { display:flex; align-items:center; gap:12px; margin-left:auto; }
+  .nav-link:hover { color: var(--text2); background: var(--dark4); }
+  .nav-link.active { color: var(--gold); background: rgba(245,200,66,0.1); }
+  .nav-right { display:flex; align-items:center; gap:10px; margin-left:auto; }
   .nav-points {
-    font-family: 'Barlow Condensed'; font-weight: 700; font-size: 16px;
-    color: var(--gold); background: rgba(255,215,0,0.1);
-    border: 1px solid rgba(255,215,0,0.25); border-radius: 6px; padding: 4px 12px;
+    font-weight: 700; font-size: 14px;
+    color: var(--gold); background: rgba(245,200,66,0.08);
+    border: 1px solid rgba(245,200,66,0.2); border-radius: 20px; padding: 4px 12px;
   }
-  .nav-user { font-weight:600; font-size:14px; color: var(--text); }
-  .nav-head { width:32px; height:32px; border-radius:5px; image-rendering:pixelated; border:1px solid var(--border); }
+  .nav-user { font-weight:600; font-size:13px; color: var(--text2); }
+  .nav-head { width:30px; height:30px; border-radius:50%; image-rendering:pixelated; border:2px solid var(--border); }
   .nav-logout { font-size:12px; color:var(--muted); text-decoration:none; transition:color 0.2s; }
   .nav-logout:hover { color: var(--red); }
 
-  /* HERO */
-  .hero { text-align:center; padding: 80px 20px 60px; position:relative; z-index:1; }
+  /* ====== HERO ====== */
+  .hero { text-align:center; padding: 90px 20px 70px; position:relative; z-index:1; }
   .hero-eyebrow {
     display:inline-flex; align-items:center; gap:8px;
-    background: rgba(255,215,0,0.08); border:1px solid rgba(255,215,0,0.2);
-    color: var(--gold); font-family:'Barlow Condensed'; font-weight:700;
-    font-size:12px; letter-spacing:3px; text-transform:uppercase;
-    padding: 6px 18px; border-radius:4px; margin-bottom:24px;
+    background: rgba(245,200,66,0.07); border:1px solid rgba(245,200,66,0.18);
+    color: var(--gold); font-weight:700;
+    font-size:11px; letter-spacing:3px; text-transform:uppercase;
+    padding: 6px 18px; border-radius:100px; margin-bottom:28px;
   }
   .hero-title {
-    font-family: 'Bebas Neue'; font-size: clamp(56px,10vw,120px);
-    letter-spacing: 4px; line-height: 0.9;
-    background: linear-gradient(180deg, #fff 0%, var(--gold) 60%, var(--gold2) 100%);
+    font-family: 'Bebas Neue'; font-size: clamp(64px,11vw,130px);
+    letter-spacing: 5px; line-height: 0.88;
+    background: linear-gradient(170deg, #ffffff 0%, var(--gold3) 45%, var(--gold2) 100%);
     -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-    margin-bottom: 20px;
+    margin-bottom: 22px;
   }
-  .hero-sub { color:var(--muted); font-size:16px; max-width:440px; margin:0 auto 40px; line-height:1.7; }
+  .hero-sub { color:var(--muted); font-size:16px; max-width:420px; margin:0 auto 44px; line-height:1.75; }
 
-  /* BUTTONS */
+  /* ====== BUTTONS ====== */
   .btn {
     display:inline-flex; align-items:center; gap:8px;
-    font-family:'Barlow Condensed'; font-weight:700; font-size:16px;
-    letter-spacing:1px; text-transform:uppercase; text-decoration:none;
-    padding:12px 28px; border-radius:6px; border:none; cursor:pointer;
+    font-weight:700; font-size:14px;
+    letter-spacing:0.5px; text-decoration:none;
+    padding:12px 28px; border-radius:100px; border:none; cursor:pointer;
     transition: all 0.2s;
   }
   .btn-gold {
-    background: linear-gradient(135deg, var(--gold), var(--gold2));
-    color:#000; box-shadow: 0 4px 20px rgba(255,215,0,0.2);
+    background: linear-gradient(135deg, var(--gold3), var(--gold2));
+    color:#000; box-shadow: 0 4px 24px rgba(245,200,66,0.25);
   }
-  .btn-gold:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(255,215,0,0.35); }
+  .btn-gold:hover { transform:translateY(-2px); box-shadow:0 8px 32px rgba(245,200,66,0.4); }
   .btn-outline {
-    background:transparent; color:var(--text);
+    background:transparent; color:var(--text2);
     border:1px solid var(--border2);
   }
-  .btn-outline:hover { border-color:var(--border); background:var(--dark3); }
+  .btn-outline:hover { border-color:var(--border); background:var(--dark4); }
 
-  /* CARDS */
+  /* ====== CARDS ====== */
   .card {
-    background: var(--card); border:1px solid var(--border);
-    border-radius:12px; padding:24px; position:relative; overflow:hidden;
+    background: var(--card); border:1px solid var(--border2);
+    border-radius:16px; padding:24px; position:relative; overflow:hidden;
   }
   .card-inner {
-    background: var(--card2); border:1px solid var(--border2);
-    border-radius:10px; padding:20px;
+    background: var(--card2); border:1px solid var(--border3);
+    border-radius:12px; padding:20px;
   }
 
-  /* LAYOUT */
-  .wrap { max-width:1280px; margin:0 auto; padding:0 24px; position:relative; z-index:1; }
-  .wrap-sm { max-width:560px; margin:0 auto; padding:0 24px; position:relative; z-index:1; }
-  .page { padding: 40px 0 100px; }
+  /* ====== LAYOUT ====== */
+  .wrap { max-width:1240px; margin:0 auto; padding:0 24px; position:relative; z-index:1; }
+  .wrap-sm { max-width:540px; margin:0 auto; padding:0 24px; position:relative; z-index:1; }
+  .page { padding: 32px 0 100px; }
 
-  /* SECTION */
+  /* ====== SECTION ====== */
   .sec-title {
-    font-family:'Bebas Neue'; font-size:28px; letter-spacing:2px;
+    font-family:'Bebas Neue'; font-size:26px; letter-spacing:2px;
     color:var(--text); margin-bottom:4px;
   }
-  .sec-sub { color:var(--muted); font-size:13px; margin-bottom:20px; }
+  .sec-sub { color:var(--muted); font-size:12px; margin-bottom:20px; }
 
-  /* TABS */
-  .tabs { display:flex; gap:3px; flex-wrap:wrap; margin-bottom:20px; }
+  /* ====== TABS ====== */
+  .tabs {
+    display:flex; gap:4px; flex-wrap:wrap; margin-bottom:16px;
+    background: var(--dark3); padding:4px; border-radius:12px;
+    border:1px solid var(--border3);
+  }
   .tab {
-    padding:7px 14px; border-radius:6px; cursor:pointer;
-    font-family:'Barlow Condensed'; font-weight:700; font-size:14px;
-    letter-spacing:0.5px; border:1px solid transparent;
-    white-space:nowrap; transition:all 0.15s; text-decoration:none; color:var(--muted);
+    padding:6px 13px; border-radius:8px; cursor:pointer;
+    font-weight:700; font-size:13px;
+    white-space:nowrap; transition:all 0.15s; text-decoration:none;
+    color:var(--muted); letter-spacing:0.3px;
   }
-  .tab:hover { color:var(--text); background:var(--dark3); }
-  .tab.active { background:rgba(255,215,0,0.1); border-color:rgba(255,215,0,0.25); color:var(--gold); }
+  .tab:hover { color:var(--text2); background:var(--dark4); }
+  .tab.active { background:var(--card2); border:1px solid var(--border2); color:var(--gold); }
 
-  /* MATCH CARD */
+  /* ====== MATCH CARD – GOOGLE-STYLE ====== */
   .match-card {
-    display:grid; grid-template-columns: 1fr 120px 1fr 300px;
-    align-items:center; gap:12px;
-    background: var(--card2); border:1px solid var(--border2);
-    border-radius:10px; padding:14px 18px; margin-bottom:8px;
-    transition: border-color 0.2s, background 0.2s;
+    display:grid;
+    grid-template-columns: 1fr 140px 1fr 260px;
+    align-items:center; gap:0;
+    background: var(--card2); border:1px solid var(--border3);
+    border-radius:14px; margin-bottom:6px;
+    transition: all 0.2s; overflow:hidden; position:relative;
   }
-  .match-card:hover { border-color: rgba(255,215,0,0.2); }
-  .match-card.tipped { border-color: rgba(0,230,118,0.25); background: rgba(0,230,118,0.02); }
-  .match-card.gesperrt { opacity:0.7; }
+  .match-card:hover { border-color: rgba(255,255,255,0.1); background:var(--card3); }
+
+  /* Status-Streifen links */
+  .match-card::before {
+    content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+    border-radius:3px 0 0 3px;
+  }
+  .match-card.upcoming-card::before { background: var(--upcoming); opacity:0.5; }
+  .match-card.soon-card::before { background: var(--soon); }
+  .match-card.live-card::before {
+    background: var(--live);
+    animation: stripe-pulse 1.5s ease-in-out infinite;
+  }
+  .match-card.final-card::before { background: var(--muted); opacity:0.3; }
+  .match-card.tipped-card::before { background: var(--green); opacity:0.6; }
+
+  @keyframes stripe-pulse {
+    0%,100% { opacity:1; }
+    50% { opacity:0.3; }
+  }
+
   .match-card.live-card {
-    border-color: rgba(255,68,68,0.4) !important;
-    background: var(--live-bg) !important;
-    animation: live-pulse 2s ease-in-out infinite;
+    border-color: rgba(255,59,59,0.25) !important;
+    background: rgba(255,59,59,0.04) !important;
   }
   .match-card.final-card {
-    border-color: rgba(255,215,0,0.15);
-    background: rgba(255,215,0,0.02);
+    opacity: 0.75;
   }
-  @keyframes live-pulse {
-    0%, 100% { border-color: rgba(255,68,68,0.4); }
-    50% { border-color: rgba(255,68,68,0.8); box-shadow: 0 0 12px rgba(255,68,68,0.2); }
-  }
+  .match-card.final-card:hover { opacity:1; }
+  .match-card.tipped-card { border-color: rgba(34,197,94,0.2); }
+
+  .match-cell { padding:14px 18px 14px 22px; }
+  .match-cell-center { padding:14px 8px; }
+  .match-cell-right { padding:14px 18px; }
+
   .match-team-home { text-align:right; }
   .match-team-away { text-align:left; }
   .team-name-row {
     display:flex; align-items:center; gap:8px;
-    font-family:'Barlow Condensed'; font-weight:700; font-size:17px;
+    font-weight:700; font-size:15px; letter-spacing:-0.2px;
   }
   .team-name-row.home { justify-content:flex-end; }
 
-  /* LIVE SCORE DISPLAY */
-  .live-score-box {
-    display:flex; align-items:center; justify-content:center; gap:8px;
-    flex-direction:column;
+  /* ====== LIVE SCORE CENTER (Google-Style) ====== */
+  .score-center {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:4px; padding:10px 4px;
   }
-  .live-score-nums {
-    display:flex; align-items:center; gap:6px;
+  .score-nums {
+    display:flex; align-items:center; gap:4px;
   }
-  .live-score-num {
-    font-family:'Bebas Neue'; font-size:32px; line-height:1;
-    min-width:30px; text-align:center;
+  .score-num {
+    font-family:'Bebas Neue'; font-size:30px; line-height:1;
+    min-width:28px; text-align:center; transition:all 0.3s;
   }
-  .live-score-num.live-color { color: var(--live); }
-  .live-score-num.final-color {
-    background: linear-gradient(135deg, var(--gold), var(--gold2));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  .score-num.live-color { color: var(--live2); }
+  .score-num.final-color { color: var(--text); opacity:0.9; }
+  .score-num.upcoming-color { color: var(--muted); font-size:18px; }
+
+  /* Tor-Flash Animation */
+  @keyframes goal-flash {
+    0%   { transform:scale(1); }
+    20%  { transform:scale(1.4); color: var(--gold3); }
+    50%  { transform:scale(1.2); color: var(--gold); }
+    100% { transform:scale(1); }
   }
-  .live-score-sep { font-family:'Bebas Neue'; font-size:24px; color:var(--muted); }
-  .live-badge {
+  .goal-scored { animation: goal-flash 0.8s ease-out forwards; }
+
+  .score-sep { font-family:'Bebas Neue'; font-size:22px; color:var(--dark4); }
+  .score-sep-upcoming { font-weight:800; font-size:13px; color:var(--muted); letter-spacing:1px; }
+
+  .status-badge {
     display:inline-flex; align-items:center; gap:4px;
-    font-family:'Barlow Condensed'; font-weight:800; font-size:10px;
-    letter-spacing:2px; text-transform:uppercase;
-    background: rgba(255,68,68,0.15); border:1px solid rgba(255,68,68,0.4);
-    color: var(--live); padding:2px 8px; border-radius:3px;
+    font-weight:800; font-size:9px; letter-spacing:2px; text-transform:uppercase;
+    padding:2px 8px; border-radius:100px;
+  }
+  .badge-live {
+    background: rgba(255,59,59,0.18); border:1px solid rgba(255,59,59,0.4);
+    color: var(--live2);
+  }
+  .badge-final {
+    background: rgba(90,106,138,0.15); border:1px solid rgba(90,106,138,0.3);
+    color: var(--muted);
+  }
+  .badge-upcoming {
+    background: rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.25);
+    color: #60A5FA;
+  }
+  .badge-soon {
+    background: rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3);
+    color: var(--soon);
   }
   .live-dot {
-    width:6px; height:6px; border-radius:50%; background:var(--live);
+    width:5px; height:5px; border-radius:50%; background:currentColor;
     animation: blink 1s step-end infinite;
   }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-  .final-badge {
-    font-family:'Barlow Condensed'; font-weight:700; font-size:10px;
-    letter-spacing:2px; color:var(--gold); background:rgba(255,215,0,0.08);
-    border:1px solid rgba(255,215,0,0.2); padding:2px 8px; border-radius:3px;
-  }
-  .match-vs-block { text-align:center; }
-  .match-vs {
-    font-family:'Bebas Neue'; font-size:20px; color:var(--muted);
-    text-align:center;
-  }
-  .match-info { text-align:right; }
-  .match-date { font-size:11px; color:var(--muted); font-weight:600; letter-spacing:0.5px; }
 
-  /* TIPP INPUT */
-  .tipp-row { display:flex; align-items:center; gap:6px; justify-content:flex-end; margin-top:6px; }
+  /* Minuten-Anzeige */
+  .live-minute {
+    font-weight:700; font-size:10px; color: var(--live2);
+    background: rgba(255,59,59,0.1); padding:1px 6px; border-radius:4px;
+  }
+
+  /* Anpfiff-Zeit */
+  .kickoff-time {
+    font-weight:700; font-size:16px; color:var(--text2); letter-spacing:0.5px;
+  }
+  .kickoff-date {
+    font-size:10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:1px;
+  }
+
+  /* ====== TIPP INPUT ====== */
+  .match-action { text-align:right; }
+  .tipp-row { display:flex; align-items:center; gap:5px; justify-content:flex-end; margin-top:4px; }
   .score-input {
-    width:42px; height:34px; background:var(--dark3);
+    width:38px; height:32px; background:var(--dark3);
     border:1px solid var(--border2); color:#fff;
-    border-radius:5px; text-align:center;
-    font-family:'Bebas Neue'; font-size:20px;
+    border-radius:8px; text-align:center;
+    font-family:'Bebas Neue'; font-size:18px;
     -moz-appearance:textfield; appearance:none;
-    transition: border-color 0.15s;
+    transition: all 0.15s;
   }
   .score-input::-webkit-inner-spin-button,
   .score-input::-webkit-outer-spin-button { -webkit-appearance:none; }
-  .score-input:focus { outline:none; border-color: rgba(255,215,0,0.5); background:var(--dark2); }
-  .score-sep { font-family:'Bebas Neue'; font-size:18px; color:var(--muted); }
+  .score-input:focus { outline:none; border-color: rgba(245,200,66,0.5); background:var(--dark2); box-shadow:0 0 0 3px rgba(245,200,66,0.08); }
+  .score-sep-in { font-family:'Bebas Neue'; font-size:16px; color:var(--muted); }
   .tipp-btn {
-    background:linear-gradient(135deg,var(--gold),var(--gold2));
-    color:#000; border:none; border-radius:5px;
-    padding:5px 12px; font-family:'Barlow Condensed';
-    font-weight:700; font-size:13px; cursor:pointer;
-    letter-spacing:0.5px; transition:opacity 0.2s; white-space:nowrap;
+    background:linear-gradient(135deg,var(--gold3),var(--gold2));
+    color:#000; border:none; border-radius:8px;
+    padding:5px 11px; font-weight:800;
+    font-size:11px; cursor:pointer;
+    letter-spacing:0.3px; transition:opacity 0.2s; white-space:nowrap;
   }
-  .tipp-btn:hover { opacity:0.85; }
+  .tipp-btn:hover { opacity:0.85; transform:scale(1.02); }
   .tipp-saved {
-    color:var(--green); font-size:13px;
-    font-family:'Barlow Condensed'; font-weight:700;
+    color:var(--green); font-size:12px; font-weight:700;
     display:flex; align-items:center; gap:4px;
   }
   .tipp-saved-with-result { display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
   .tipp-result-line {
-    font-size:11px; color:var(--muted); font-family:'Barlow Condensed'; font-weight:600;
+    font-size:10px; color:var(--muted); font-weight:600; letter-spacing:0.5px;
   }
   .tipp-result-line.gewonnen { color: var(--green); }
   .tipp-result-line.verloren { color: var(--red); }
-  .locked-badge {
-    font-size:12px; color:var(--live);
-    font-family:'Barlow Condensed'; font-weight:700;
-    background: rgba(255,68,68,0.1); border:1px solid rgba(255,68,68,0.3);
-    padding:3px 10px; border-radius:4px; display:inline-flex; align-items:center; gap:4px;
+  .action-badge {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:11px; font-weight:700; letter-spacing:0.5px;
+    padding:3px 10px; border-radius:6px;
   }
-  .soon-badge {
-    font-size:12px; color:var(--gold2);
-    font-family:'Barlow Condensed'; font-weight:700;
-    background: rgba(255,165,0,0.1); border:1px solid rgba(255,165,0,0.2);
-    padding:3px 10px; border-radius:4px; display:inline-flex; align-items:center; gap:4px;
-  }
+  .badge-locked { color:var(--live); background:rgba(255,59,59,0.08); border:1px solid rgba(255,59,59,0.2); }
+  .badge-warn { color:var(--soon); background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); }
+  .badge-missed { color:var(--muted); font-size:11px; font-weight:600; }
 
-  /* STATS ROW */
-  .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
-  .stat-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px; text-align:center; }
+  /* ====== LIVE BANNER ====== */
+  .live-games-banner {
+    background: linear-gradient(90deg, rgba(255,59,59,0.08), rgba(255,59,59,0.03));
+    border: 1px solid rgba(255,59,59,0.25);
+    border-radius:12px; padding:12px 18px; margin-bottom:14px;
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    overflow:hidden; position:relative;
+  }
+  .live-banner-scroll {
+    display:flex; gap:20px; overflow:hidden; flex:1;
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 5%,#000 90%,transparent 100%);
+  }
+  .live-banner-item {
+    display:flex; align-items:center; gap:8px;
+    font-size:13px; font-weight:700; white-space:nowrap;
+    color:var(--text);
+  }
+  .live-banner-score { font-family:'Bebas Neue'; font-size:18px; color:var(--live2); }
+
+  /* ====== STATS ====== */
+  .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
+  .stat-card {
+    background:var(--card); border:1px solid var(--border3);
+    border-radius:14px; padding:18px; text-align:center;
+  }
   .stat-num {
-    font-family:'Bebas Neue'; font-size:42px; line-height:1;
-    background:linear-gradient(135deg,var(--gold),var(--gold2));
+    font-family:'Bebas Neue'; font-size:44px; line-height:1;
+    background:linear-gradient(135deg,var(--gold3),var(--gold2));
     -webkit-background-clip:text; -webkit-text-fill-color:transparent;
   }
-  .stat-label { color:var(--muted); font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-top:4px; }
+  .stat-label { color:var(--muted); font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-top:4px; }
 
-  /* PROGRESS */
-  .progress-track { height:6px; background:var(--dark3); border-radius:3px; overflow:hidden; }
-  .progress-fill { height:100%; background:linear-gradient(90deg,var(--gold),var(--gold2)); border-radius:3px; transition:width 0.5s; }
+  /* ====== PROGRESS ====== */
+  .progress-track { height:5px; background:var(--dark3); border-radius:3px; overflow:hidden; }
+  .progress-fill { height:100%; background:linear-gradient(90deg,var(--gold3),var(--gold2)); border-radius:3px; transition:width 0.8s cubic-bezier(0.34,1.56,0.64,1); }
 
-  /* GRUPPE HEADER */
+  /* ====== GRUPPE HEADER ====== */
   .gruppe-header { display:flex; align-items:center; gap:16px; margin-bottom:16px; }
   .gruppe-letter {
     font-family:'Bebas Neue'; font-size:52px; line-height:1;
