@@ -17,36 +17,242 @@ except ImportError:
     input("Drücke Enter zum Beenden...")
     sys.exit()
 
+try:
+    import requests as req_lib
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+    print("[WARN] 'requests' nicht installiert – Live-Scores deaktiviert. Installiere mit: pip install requests")
+
 # ==========================================
 # KONFIGURATION
 # ==========================================
 chatlog_ordner = r"C:\Users\zaine\Downloads\mmc-develop-win32\MultiMC\instances\1.8.9\.minecraft\neoessentials\chatlog"
 
+# Persistente Datenspeicherung
+DATA_FILE = "wm2026_data.json"
+LIVESCORES_CACHE_FILE = "livescores_cache.json"
+
 app = Flask(__name__)
 app.secret_key = "wm2026_griefergames_ultra_secret_1337"
+# WICHTIG: Permanente Sessions – bleiben nach Browser-Schließen erhalten
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=30)
 
 active_codes = {}
 user_db = {}
+live_scores_cache = {}  # spiel_id -> {"heim": x, "gast": y, "status": "live"/"final"/"upcoming"}
+
+# ==========================================
+# PERSISTENTER DATENSPEICHER
+# ==========================================
+def save_data():
+    """Speichert user_db in JSON-Datei"""
+    try:
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(user_db, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[FEHLER] Kann Daten nicht speichern: {e}")
+
+def load_data():
+    """Lädt user_db aus JSON-Datei"""
+    global user_db
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                user_db = json.load(f)
+            print(f"[OK] {len(user_db)} Benutzer geladen aus {DATA_FILE}")
+        except Exception as e:
+            print(f"[WARN] Kann {DATA_FILE} nicht laden: {e}")
+            user_db = {}
+    else:
+        user_db = {}
+        print(f"[INFO] Neue Datenbankdatei wird angelegt: {DATA_FILE}")
+
+# Beim Start laden
+load_data()
 
 # ==========================================
 # PUNKTE-SYSTEM
 # ==========================================
 PUNKTE_SYSTEM = {
-    "perfekt":     1000,   # Exaktes Ergebnis
-    "tendenz_tor": 500,    # Richtige Tordifferenz
-    "tendenz":     200,    # Richtige Tendenz (Sieg/Unentschieden/Niederlage)
+    "perfekt":     1000,
+    "tendenz_tor": 500,
+    "tendenz":     200,
     "falsch":      0,
-    "einsatz":     50,     # Kosten pro Tipp
-    "deadline_min": 10     # Minuten vor Spielbeginn = kein Tipp mehr möglich
+    "einsatz":     50,
+    "deadline_min": 0   # Gesperrt sobald Spiel LIVE ist (0 Min = bei Anpfiff)
 }
 
 # ==========================================
-# FLAGGEN (als Image-URLs via flagcdn.com)
+# LIVE-SCORES SYSTEM
+# ==========================================
+# Wir verwenden die kostenlose football-data.org API (WM 2026 Competition ID)
+# API Key: kostenlos auf football-data.org registrieren (Free Tier reicht!)
+# ODER: Wir nutzen TheSportsDB (keine Key nötig)
+FOOTBALL_API_KEY = ""  # Optional: football-data.org API Key hier eintragen
+WM_COMPETITION_ID = "2000"  # football-data.org: FIFA World Cup
+
+def fetch_live_scores_thesportsdb():
+    """
+    Holt Live-Scores von TheSportsDB (kostenlos, kein Key).
+    Parst Ergebnisse und matched sie mit unseren Spielen.
+    """
+    global live_scores_cache
+    if not REQUESTS_AVAILABLE:
+        return
+
+    # TheSportsDB: Heute's Ereignisse für Soccer
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    url = f"https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d={today}&s=Soccer"
+
+    try:
+        resp = req_lib.get(url, timeout=5)
+        if resp.status_code != 200:
+            return
+        data = resp.json()
+        events = data.get("events") or []
+
+        # Alle WM 2026 Spiele aus unserer DB
+        for gruppe_data in WM_GRUPPEN.values():
+            for spiel in gruppe_data["spiele"]:
+                heim = spiel["heim"].lower()
+                gast = spiel["gast"].lower()
+                sid = spiel["id"]
+
+                for ev in events:
+                    ev_heim = (ev.get("strHomeTeam") or "").lower()
+                    ev_gast = (ev.get("strAwayTeam") or "").lower()
+                    ev_liga = (ev.get("strLeague") or "").lower()
+
+                    # Matching: FIFA WM UND Teams matchen
+                    if "world cup" not in ev_liga and "fifa" not in ev_liga:
+                        continue
+
+                    if _teams_match(heim, ev_heim) and _teams_match(gast, ev_gast):
+                        status = ev.get("strStatus", "").lower()
+                        score_home = ev.get("intHomeScore")
+                        score_away = ev.get("intAwayScore")
+
+                        cache_entry = {
+                            "status": "upcoming",
+                            "heim": None,
+                            "gast": None,
+                            "minuto": None
+                        }
+
+                        if status in ["ft", "aet", "pen", "finished", "match finished"]:
+                            cache_entry["status"] = "final"
+                            cache_entry["heim"] = int(score_home) if score_home is not None else None
+                            cache_entry["gast"] = int(score_away) if score_away is not None else None
+                        elif status.isdigit() or status in ["ht", "live", "in progress"]:
+                            cache_entry["status"] = "live"
+                            cache_entry["heim"] = int(score_home) if score_home is not None else 0
+                            cache_entry["gast"] = int(score_away) if score_away is not None else 0
+                            if status.isdigit():
+                                cache_entry["minuto"] = int(status)
+
+                        live_scores_cache[sid] = cache_entry
+                        break
+    except Exception as e:
+        print(f"[LIVE] Fehler beim Score-Abruf: {e}")
+
+def _teams_match(our_name, api_name):
+    """Fuzzy-Matching für Teamnamen (DE <-> EN)"""
+    TEAM_ALIASES = {
+        "deutschland": ["germany", "deutschland"],
+        "niederlande": ["netherlands", "holland"],
+        "österreich": ["austria"],
+        "schweiz": ["switzerland"],
+        "elfenbeinküste": ["ivory coast", "côte d'ivoire"],
+        "tschechien": ["czech republic", "czechia"],
+        "südkorea": ["south korea", "korea republic"],
+        "südafrika": ["south africa"],
+        "saudi-arabien": ["saudi arabia"],
+        "kap verde": ["cape verde"],
+        "neuseeland": ["new zealand"],
+        "schottland": ["scotland"],
+        "brasilien": ["brazil"],
+        "frankreich": ["france"],
+        "spanien": ["spain"],
+        "italien": ["italy"],
+        "belgien": ["belgium"],
+        "kroatien": ["croatia"],
+        "ägypten": ["egypt"],
+        "norwegen": ["norway"],
+        "schweden": ["sweden"],
+        "argentinien": ["argentina"],
+        "kolumbien": ["colombia"],
+        "australien": ["australia"],
+        "türkei": ["turkey", "türkiye"],
+        "ungarn": ["hungary"],
+        "albanien": ["albania"],
+        "kamerun": ["cameroon"],
+        "nigeria": ["nigeria"],
+        "senegal": ["senegal"],
+        "marokko": ["morocco"],
+        "tunesien": ["tunisia"],
+        "portugal": ["portugal"],
+        "england": ["england"],
+        "serbien": ["serbia"],
+        "venezuela": ["venezuela"],
+        "mexiko": ["mexico"],
+        "bosnien": ["bosnia and herzegovina", "bosnia"],
+        "ecuador": ["ecuador"],
+        "paraguay": ["paraguay"],
+        "chile": ["chile"],
+        "haiti": ["haiti"],
+        "iran": ["ir iran", "iran"],
+        "katar": ["qatar"],
+        "usa": ["usa", "united states"],
+        "kanada": ["canada"],
+        "japan": ["japan"],
+        "uruguay": ["uruguay"],
+    }
+    our_lower = our_name.lower()
+    api_lower = api_name.lower()
+
+    if our_lower in api_lower or api_lower in our_lower:
+        return True
+
+    aliases = TEAM_ALIASES.get(our_lower, [our_lower])
+    for alias in aliases:
+        if alias in api_lower or api_lower in alias:
+            return True
+    return False
+
+def live_score_updater():
+    """Background-Thread: Aktualisiert Live-Scores alle 60 Sekunden"""
+    while True:
+        try:
+            fetch_live_scores_thesportsdb()
+            # Scores auch in Datei cachen
+            try:
+                with open(LIVESCORES_CACHE_FILE, 'w') as f:
+                    json.dump(live_scores_cache, f)
+            except:
+                pass
+        except Exception as e:
+            print(f"[LIVE-UPDATER] Fehler: {e}")
+        time.sleep(60)
+
+# Live-Score Lookup aus Cache laden
+if os.path.exists(LIVESCORES_CACHE_FILE):
+    try:
+        with open(LIVESCORES_CACHE_FILE, 'r') as f:
+            live_scores_cache = json.load(f)
+        print(f"[OK] Live-Score-Cache geladen ({len(live_scores_cache)} Einträge)")
+    except:
+        pass
+
+# Background-Thread starten
+threading.Thread(target=live_score_updater, daemon=True).start()
+
+# ==========================================
+# FLAGGEN
 # ==========================================
 def flag_img(code, size=32):
-    """Gibt ein <img>-Tag mit der Länderflagge zurück"""
     code_lower = code.lower()
-    # Spezialfälle
     special = {
         "sco": "gb-sct",
         "eng": "gb-eng",
@@ -254,37 +460,68 @@ WM_GRUPPEN = {
     },
 }
 
-# Alle Teams als flache Liste mit code
 ALLE_TEAMS = []
 for gruppe_key, gruppe_data in WM_GRUPPEN.items():
     for team in gruppe_data["teams"]:
         ALLE_TEAMS.append({**team, "gruppe": gruppe_key})
 
-# Mapping Name -> Code
 TEAM_CODE = {t["name"]: t["code"] for t in ALLE_TEAMS}
 
 # ==========================================
-# HELPER: Spielzeit-Check (10 Min Deadline)
+# HELPER: Spielzeit-Check
 # ==========================================
 def parse_spiel_datetime(spiel):
-    """Gibt das datetime-Objekt des Spielbeginns zurück"""
     try:
         dt_str = f"{spiel['datum']} {spiel['uhrzeit']}"
         return datetime.datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
     except:
         return None
 
-def tipp_erlaubt(spiel):
-    """True wenn man noch tippen darf (mehr als 10 Min vor Anpfiff)"""
+def get_spiel_status(spiel):
+    """
+    Gibt Status zurück:
+    - 'upcoming': Noch nicht gestartet
+    - 'live': Gerade läuft das Spiel (Live-Score aus API ODER Zeitschätzung)
+    - 'final': Spiel beendet
+    - 'soon': < 30 Min bis Anpfiff
+    """
+    sid = spiel["id"]
+
+    # Zuerst Live-Cache prüfen
+    if sid in live_scores_cache:
+        status = live_scores_cache[sid].get("status", "upcoming")
+        if status in ("live", "final"):
+            return status
+
+    # Zeitbasierte Schätzung als Fallback
     dt = parse_spiel_datetime(spiel)
     if dt is None:
-        return True
+        return "upcoming"
     jetzt = datetime.datetime.now()
-    delta = dt - jetzt
-    return delta.total_seconds() > PUNKTE_SYSTEM["deadline_min"] * 60
+    delta_min = (jetzt - dt).total_seconds() / 60
+
+    if delta_min < -30:
+        return "upcoming"
+    elif -30 <= delta_min < 0:
+        return "soon"
+    elif 0 <= delta_min < 105:  # 90 Min + Nachspielzeit
+        return "live"
+    else:
+        return "final"
+
+def tipp_erlaubt(spiel):
+    """True wenn Tipp noch erlaubt (Spiel noch nicht gestartet / noch nicht live)"""
+    status = get_spiel_status(spiel)
+    return status in ("upcoming", "soon")
+
+def get_live_score(spiel_id):
+    """Gibt Live-Score zurück oder None"""
+    entry = live_scores_cache.get(spiel_id)
+    if entry and entry.get("heim") is not None:
+        return entry
+    return None
 
 def minuten_bis_spiel(spiel):
-    """Gibt Minuten bis Spielbeginn zurück (negativ = läuft/vorbei)"""
     dt = parse_spiel_datetime(spiel)
     if dt is None:
         return 9999
@@ -295,7 +532,6 @@ def minuten_bis_spiel(spiel):
 # LEADERBOARD
 # ==========================================
 def get_leaderboard():
-    """Gibt sortierte Liste aller User mit Punkten"""
     lb = []
     for username, data in user_db.items():
         lb.append({
@@ -308,7 +544,7 @@ def get_leaderboard():
     return lb
 
 # ==========================================
-# BACKGROUND LOG-READER
+# BACKGROUND LOG-READER (Minecraft Chat)
 # ==========================================
 def minecraft_log_reader():
     global active_codes, user_db
@@ -353,6 +589,7 @@ def minecraft_log_reader():
                                                 "lieblingsteam": None,
                                                 "registered": datetime.datetime.now().strftime("%d.%m.%Y")
                                             }
+                                            save_data()  # Sofort speichern!
                                         print(f"[✓] Spieler {spieler_name} verifiziert!")
                     letzte_groesse = aktuelle_groesse
             except Exception:
@@ -362,7 +599,7 @@ def minecraft_log_reader():
 threading.Thread(target=minecraft_log_reader, daemon=True).start()
 
 # ==========================================
-# CSS / BASE HTML
+# CSS
 # ==========================================
 BASE_CSS = """
 <style>
@@ -373,6 +610,8 @@ BASE_CSS = """
     --gold2:   #FFA500;
     --green:   #00E676;
     --red:     #FF1744;
+    --live:    #FF4444;
+    --live-bg: rgba(255,68,68,0.08);
     --dark:    #07090F;
     --dark2:   #0B0E18;
     --dark3:   #101422;
@@ -396,8 +635,6 @@ BASE_CSS = """
     min-height: 100vh;
     overflow-x: hidden;
   }
-
-  /* BG PATTERN */
   body::before {
     content:'';
     position: fixed; inset: 0;
@@ -515,15 +752,28 @@ BASE_CSS = """
 
   /* MATCH CARD */
   .match-card {
-    display:grid; grid-template-columns: 1fr 60px 1fr 280px;
+    display:grid; grid-template-columns: 1fr 120px 1fr 300px;
     align-items:center; gap:12px;
     background: var(--card2); border:1px solid var(--border2);
     border-radius:10px; padding:14px 18px; margin-bottom:8px;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background 0.2s;
   }
   .match-card:hover { border-color: rgba(255,215,0,0.2); }
   .match-card.tipped { border-color: rgba(0,230,118,0.25); background: rgba(0,230,118,0.02); }
-  .match-card.gesperrt { opacity:0.65; }
+  .match-card.gesperrt { opacity:0.7; }
+  .match-card.live-card {
+    border-color: rgba(255,68,68,0.4) !important;
+    background: var(--live-bg) !important;
+    animation: live-pulse 2s ease-in-out infinite;
+  }
+  .match-card.final-card {
+    border-color: rgba(255,215,0,0.15);
+    background: rgba(255,215,0,0.02);
+  }
+  @keyframes live-pulse {
+    0%, 100% { border-color: rgba(255,68,68,0.4); }
+    50% { border-color: rgba(255,68,68,0.8); box-shadow: 0 0 12px rgba(255,68,68,0.2); }
+  }
   .match-team-home { text-align:right; }
   .match-team-away { text-align:left; }
   .team-name-row {
@@ -531,8 +781,45 @@ BASE_CSS = """
     font-family:'Barlow Condensed'; font-weight:700; font-size:17px;
   }
   .team-name-row.home { justify-content:flex-end; }
+
+  /* LIVE SCORE DISPLAY */
+  .live-score-box {
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    flex-direction:column;
+  }
+  .live-score-nums {
+    display:flex; align-items:center; gap:6px;
+  }
+  .live-score-num {
+    font-family:'Bebas Neue'; font-size:32px; line-height:1;
+    min-width:30px; text-align:center;
+  }
+  .live-score-num.live-color { color: var(--live); }
+  .live-score-num.final-color {
+    background: linear-gradient(135deg, var(--gold), var(--gold2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .live-score-sep { font-family:'Bebas Neue'; font-size:24px; color:var(--muted); }
+  .live-badge {
+    display:inline-flex; align-items:center; gap:4px;
+    font-family:'Barlow Condensed'; font-weight:800; font-size:10px;
+    letter-spacing:2px; text-transform:uppercase;
+    background: rgba(255,68,68,0.15); border:1px solid rgba(255,68,68,0.4);
+    color: var(--live); padding:2px 8px; border-radius:3px;
+  }
+  .live-dot {
+    width:6px; height:6px; border-radius:50%; background:var(--live);
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .final-badge {
+    font-family:'Barlow Condensed'; font-weight:700; font-size:10px;
+    letter-spacing:2px; color:var(--gold); background:rgba(255,215,0,0.08);
+    border:1px solid rgba(255,215,0,0.2); padding:2px 8px; border-radius:3px;
+  }
+  .match-vs-block { text-align:center; }
   .match-vs {
-    font-family:'Bebas Neue'; font-size:22px; color:var(--muted);
+    font-family:'Bebas Neue'; font-size:20px; color:var(--muted);
     text-align:center;
   }
   .match-info { text-align:right; }
@@ -565,10 +852,16 @@ BASE_CSS = """
     font-family:'Barlow Condensed'; font-weight:700;
     display:flex; align-items:center; gap:4px;
   }
+  .tipp-saved-with-result { display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+  .tipp-result-line {
+    font-size:11px; color:var(--muted); font-family:'Barlow Condensed'; font-weight:600;
+  }
+  .tipp-result-line.gewonnen { color: var(--green); }
+  .tipp-result-line.verloren { color: var(--red); }
   .locked-badge {
-    font-size:12px; color:var(--red);
+    font-size:12px; color:var(--live);
     font-family:'Barlow Condensed'; font-weight:700;
-    background: rgba(255,23,68,0.1); border:1px solid rgba(255,23,68,0.2);
+    background: rgba(255,68,68,0.1); border:1px solid rgba(255,68,68,0.3);
     padding:3px 10px; border-radius:4px; display:inline-flex; align-items:center; gap:4px;
   }
   .soon-badge {
@@ -654,23 +947,6 @@ BASE_CSS = """
   }
   .punkte-row.perfekt { border-color:rgba(0,230,118,0.3); background:rgba(0,230,118,0.04); }
 
-  /* TEAM GRID */
-  .team-select-grid {
-    display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:10px; margin-top:16px;
-  }
-  .team-select-btn {
-    background:var(--dark3); border:2px solid var(--border2);
-    border-radius:10px; padding:14px 10px; text-align:center;
-    cursor:pointer; transition:all 0.2s; display:flex; flex-direction:column;
-    align-items:center; gap:8px; font-family:'Barlow Condensed'; font-weight:700; font-size:14px;
-  }
-  .team-select-btn:hover {
-    border-color:var(--gold); background:rgba(255,215,0,0.06);
-    transform:translateY(-2px);
-  }
-  .team-flag-img { width:48px; height:32px; border-radius:4px; object-fit:cover; }
-  .team-gruppe-tag { font-size:11px; color:var(--muted); font-weight:600; letter-spacing:1px; }
-
   /* CODE BOX */
   .code-box {
     font-family:'Bebas Neue'; font-size:60px; letter-spacing:16px;
@@ -698,7 +974,6 @@ BASE_CSS = """
   }
   @keyframes spin { to { transform:rotate(360deg); } }
 
-  /* PROGRESS BAR ANIMATED */
   .prog-anim { height:3px; background:var(--dark3); border-radius:2px; margin-top:16px; overflow:hidden; }
   .prog-anim-fill {
     height:100%; width:0%;
@@ -708,26 +983,33 @@ BASE_CSS = """
   }
   @keyframes prog { to { width:100%; } }
 
-  /* ALERT */
   .alert { padding:12px 18px; border-radius:7px; margin-bottom:14px; font-size:14px; font-weight:500; }
   .alert-green { background:rgba(0,230,118,0.08); border:1px solid rgba(0,230,118,0.25); color:var(--green); }
   .alert-gold  { background:rgba(255,215,0,0.06); border:1px solid rgba(255,215,0,0.2);  color:var(--gold); text-align:center; }
 
-  /* MC HEAD in profile */
   .mc-head-lg { width:72px; height:72px; border-radius:10px; image-rendering:pixelated; border:2px solid var(--border); }
 
-  /* BADGE / MEDAL */
-  .medal { font-size:22px; }
-
-  /* FADE */
   .fade-in { animation: fadeIn 0.4s ease forwards; }
   @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 
-  /* DIVIDER */
   .divider { height:1px; background:var(--border2); margin:24px 0; }
 
+  /* LIVE SCORES HEADER BANNER */
+  .live-games-banner {
+    background: linear-gradient(90deg, rgba(255,68,68,0.1), rgba(255,68,68,0.05));
+    border: 1px solid rgba(255,68,68,0.3);
+    border-radius:10px; padding:14px 18px; margin-bottom:16px;
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  }
+  .live-games-title {
+    font-family:'Barlow Condensed'; font-weight:800; font-size:13px;
+    letter-spacing:2px; text-transform:uppercase; color:var(--live);
+    display:flex; align-items:center; gap:6px;
+  }
+
   @media(max-width:900px){
-    .match-card { grid-template-columns:1fr; }
+    .match-card { grid-template-columns:1fr 100px 1fr; }
+    .match-card .match-info { display:none; }
     .stats-grid { grid-template-columns:repeat(3,1fr); }
     .punkte-grid { grid-template-columns:1fr; }
   }
@@ -735,9 +1017,9 @@ BASE_CSS = """
     .navbar { padding:0 16px; }
     .nav-links { display:none; }
     .stats-grid { grid-template-columns:1fr; }
-    .team-select-grid { grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); }
     .lb-row { grid-template-columns:40px 1fr 80px; }
     .lb-tipps { display:none; }
+    .match-card { grid-template-columns:1fr 80px 1fr; }
   }
 </style>
 """
@@ -759,7 +1041,6 @@ BASE_HTML = """<!DOCTYPE html>
 def get_navbar(username, points, lieblingsteam, active_page="dashboard"):
     team_code = TEAM_CODE.get(lieblingsteam, "")
     team_flag_html = flag_img(team_code, 20) if team_code else ""
-    
     pages = [
         ("dashboard", "/dashboard", "⚽ Tipps"),
         ("leaderboard", "/leaderboard", "🏆 Rangliste"),
@@ -769,7 +1050,6 @@ def get_navbar(username, points, lieblingsteam, active_page="dashboard"):
     for page_id, url, label in pages:
         active_class = "active" if active_page == page_id else ""
         links += f'<a href="{url}" class="nav-link {active_class}">{label}</a>'
-    
     return f"""
     <nav class="navbar">
       <span class="nav-logo">WM 2026</span>
@@ -882,17 +1162,14 @@ def check_status(code):
         return jsonify({"status": active_codes[code]["status"]})
     return jsonify({"status": "not_found"})
 
-# Wird vom lokalen watcher.py aufgerufen wenn jemand #verifyWM schreibt
 @app.route('/api/verify', methods=['POST'])
 def api_verify():
     data = request.get_json()
     secret = data.get("secret", "")
     code = data.get("code", "")
     username = data.get("username", "")
-
     if secret != "GG_VERIFY_SECRET_2026":
         return jsonify({"error": "Unauthorized"}), 403
-
     if code in active_codes and active_codes[code]["status"] == "pending":
         active_codes[code]["status"] = "verified"
         active_codes[code]["username"] = username
@@ -903,16 +1180,32 @@ def api_verify():
                 "lieblingsteam": None,
                 "registered": datetime.datetime.now().strftime("%d.%m.%Y")
             }
-        print(f"[OK] {username} via API verifiziert!")
+            save_data()
         return jsonify({"success": True})
-
     return jsonify({"error": "Code nicht gefunden"}), 404
+
+# NEU: Live-Score API endpoint für Frontend-Polling
+@app.route('/api/live_scores')
+def api_live_scores():
+    """Gibt alle aktuellen Live-Scores zurück"""
+    result = {}
+    for gruppe_data in WM_GRUPPEN.values():
+        for spiel in gruppe_data["spiele"]:
+            sid = spiel["id"]
+            status = get_spiel_status(spiel)
+            score = get_live_score(sid)
+            result[sid] = {
+                "status": status,
+                "score": score
+            }
+    return jsonify(result)
 
 @app.route('/login_success/<code>')
 def login_success(code):
     if code in active_codes and active_codes[code]["status"] == "verified":
         username = active_codes[code]["username"]
         session["username"] = username
+        session.permanent = True  # WICHTIG: Permanente Session
         del active_codes[code]
         if username in user_db and user_db[username].get("lieblingsteam"):
             return redirect(url_for('dashboard'))
@@ -928,9 +1221,9 @@ def choose_team():
         team_name = request.form.get('team')
         if username in user_db:
             user_db[username]["lieblingsteam"] = team_name
+            save_data()  # Speichern!
         return redirect(url_for('dashboard'))
 
-    # Landesfarben-Verläufe pro Nation (c1 = Hauptfarbe, c2 = Sekundärfarbe, text = Textfarbe)
     TEAM_COLORS = {
         "Mexiko":          ("1a7c3e", "d52b1e", "ffffff"),
         "Südkorea":        ("cd2e3a", "003478", "ffffff"),
@@ -990,9 +1283,7 @@ def choose_team():
             special_map = {"sco": "gb-sct", "eng": "gb-eng"}
             flag_code = special_map.get(code, code)
             flag_src = f"https://flagcdn.com/h56/{flag_code}.png"
-
             c1, c2, txt = TEAM_COLORS.get(team['name'], ("1a2a4a", "2d4a8a", "ffffff"))
-
             teams_html += f"""
             <button type="submit" name="team" value="{team['name']}"
               class="team-nation-btn"
@@ -1005,7 +1296,6 @@ def choose_team():
               <span class="team-nation-name">{team['name']}</span>
               <span class="team-nation-group">Gruppe {gruppe_key}</span>
             </button>"""
-
         groups_html += f"""
         <div style="margin-bottom:28px;">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
@@ -1019,51 +1309,20 @@ def choose_team():
 
     return BASE_HTML + f"""
     <style>
-      .team-nation-grid {{
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-        gap: 12px;
-      }}
+      .team-nation-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }}
       .team-nation-btn {{
         position: relative; overflow: hidden;
         background: linear-gradient(135deg, var(--c1), var(--c2));
-        border: none; border-radius: 12px;
-        padding: 0; cursor: pointer;
+        border: none; border-radius: 12px; padding: 0; cursor: pointer;
         display: flex; flex-direction: column; align-items: center;
-        gap: 0; font-family: inherit;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-        min-height: 130px; justify-content: flex-end;
+        gap: 0; font-family: inherit; transition: transform 0.2s ease, box-shadow 0.2s ease;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4); min-height: 130px; justify-content: flex-end;
       }}
-      .team-nation-btn:hover {{
-        box-shadow: 0 8px 28px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,215,0,0.5);
-      }}
-      .team-nation-glow {{
-        position: absolute; inset: 0;
-        background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.55) 100%);
-        z-index: 1;
-      }}
-      .team-nation-flag {{
-        position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-        width: 64px; height: 43px; object-fit: cover;
-        border-radius: 5px;
-        box-shadow: 0 3px 12px rgba(0,0,0,0.5);
-        z-index: 2;
-      }}
-      .team-nation-name {{
-        position: relative; z-index: 3;
-        color: #fff; font-family: 'Barlow Condensed'; font-weight: 800;
-        font-size: 15px; letter-spacing: 0.5px;
-        text-shadow: 0 1px 6px rgba(0,0,0,0.8);
-        padding: 0 10px; margin-top: 72px;
-        text-align: center; line-height: 1.2;
-      }}
-      .team-nation-group {{
-        position: relative; z-index: 3;
-        color: rgba(255,255,255,0.65); font-size: 11px;
-        font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
-        padding-bottom: 12px; margin-top: 3px;
-      }}
+      .team-nation-btn:hover {{ box-shadow: 0 8px 28px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,215,0,0.5); }}
+      .team-nation-glow {{ position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.55) 100%); z-index: 1; }}
+      .team-nation-flag {{ position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 64px; height: 43px; object-fit: cover; border-radius: 5px; box-shadow: 0 3px 12px rgba(0,0,0,0.5); z-index: 2; }}
+      .team-nation-name {{ position: relative; z-index: 3; color: #fff; font-family: 'Barlow Condensed'; font-weight: 800; font-size: 15px; letter-spacing: 0.5px; text-shadow: 0 1px 6px rgba(0,0,0,0.8); padding: 0 10px; margin-top: 72px; text-align: center; line-height: 1.2; }}
+      .team-nation-group {{ position: relative; z-index: 3; color: rgba(255,255,255,0.65); font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; padding-bottom: 12px; margin-top: 3px; }}
     </style>
     <div class="page">
       <div class="wrap">
@@ -1078,7 +1337,7 @@ def choose_team():
     </body></html>"""
 
 # ==========================================
-# DASHBOARD / GRUPPE VIEW
+# DASHBOARD / GRUPPE VIEW (mit Live-Scores!)
 # ==========================================
 def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
     user_info = user_db[username]
@@ -1089,7 +1348,7 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
     navbar = get_navbar(username, points, lieblingsteam, active_page)
     gruppe_data = WM_GRUPPEN[gruppe_id]
     mein_team = next((t for t in ALLE_TEAMS if t["name"] == lieblingsteam), None)
-    
+
     total_spiele = sum(len(g["spiele"]) for g in WM_GRUPPEN.values())
     getippt = len(tipps)
 
@@ -1099,43 +1358,101 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         ac = "active" if g == gruppe_id else ""
         tabs_html += f'<a href="/gruppe/{g}" class="tab {ac}">GR. {g}</a>'
 
-    # Team-Pills der Gruppe
+    # Team-Pills
     team_pills = ""
     for t in gruppe_data["teams"]:
         is_mine = (t["name"] == lieblingsteam)
         mine_class = "mein-team" if is_mine else ""
         team_pills += f'<span class="gruppe-team-pill {mine_class}">{flag_img(t["code"],20)} {t["name"]}</span>'
 
-    # Spiele
+    # Laufende Spiele Banner
+    laufende_spiele = []
+    for g_data in WM_GRUPPEN.values():
+        for sp in g_data["spiele"]:
+            st = get_spiel_status(sp)
+            if st == "live":
+                sc = get_live_score(sp["id"])
+                score_txt = f"{sc['heim']}:{sc['gast']}" if sc and sc.get('heim') is not None else "?:?"
+                laufende_spiele.append(f"{sp['heim']} {score_txt} {sp['gast']}")
+
+    live_banner = ""
+    if laufende_spiele:
+        spiele_items = " &nbsp;|&nbsp; ".join(laufende_spiele)
+        live_banner = f"""
+        <div class="live-games-banner">
+          <div class="live-games-title"><div class="live-dot"></div> LIVE JETZT</div>
+          <div style="font-family:'Barlow Condensed';font-size:14px;font-weight:600;">{spiele_items}</div>
+        </div>"""
+
+    # Spiele rendern
     spiele_html = ""
     for spiel in gruppe_data["spiele"]:
         sid = spiel["id"]
         tipp = tipps.get(sid)
-        erlaubt = tipp_erlaubt(spiel)
+        status = get_spiel_status(spiel)
+        live_score = get_live_score(sid)
         min_bis = minuten_bis_spiel(spiel)
+        erlaubt = status in ("upcoming", "soon")
 
         heim_code = TEAM_CODE.get(spiel["heim"], "")
         gast_code = TEAM_CODE.get(spiel["gast"], "")
 
-        tipped_class = "tipped" if tipp else ("gesperrt" if not erlaubt else "")
+        # Kartenstatus
+        if status == "live":
+            card_class = "match-card live-card"
+        elif status == "final":
+            card_class = "match-card final-card"
+        elif tipp:
+            card_class = "match-card tipped"
+        elif not erlaubt:
+            card_class = "match-card gesperrt"
+        else:
+            card_class = "match-card"
 
+        # Mittelteil: Live-Score oder VS
+        if status in ("live", "final") and live_score and live_score.get("heim") is not None:
+            score_color = "live-color" if status == "live" else "final-color"
+            status_badge = f'<div class="live-badge"><div class="live-dot"></div> LIVE</div>' if status == "live" else f'<div class="final-badge">ABPFIFF</div>'
+            vs_html = f"""
+            <div class="live-score-box">
+              {status_badge}
+              <div class="live-score-nums">
+                <span class="live-score-num {score_color}">{live_score["heim"]}</span>
+                <span class="live-score-sep">:</span>
+                <span class="live-score-num {score_color}">{live_score["gast"]}</span>
+              </div>
+            </div>"""
+        elif status in ("live", "final"):
+            # Spiel ist live/final aber Score noch nicht im Cache
+            badge = f'<div class="live-badge"><div class="live-dot"></div> LIVE</div>' if status == "live" else f'<div class="final-badge">ABPFIFF</div>'
+            vs_html = f'<div class="live-score-box">{badge}<div class="match-vs">?:?</div></div>'
+        else:
+            vs_html = f'<div class="match-vs-block"><div class="match-vs">VS</div></div>'
+
+        # Tipp-Bereich
         if tipp:
             td = tipp if isinstance(tipp, dict) else {"heim": "?", "gast": "?"}
-            tipp_html = f'<div class="tipp-row"><span class="tipp-saved">✅ {td["heim"]} : {td["gast"]}</span></div>'
+            # Ergebnis-Auswertung anzeigen wenn Spiel vorbei
+            punkte_info = ""
+            if status == "final" and live_score and live_score.get("heim") is not None:
+                punkte_key = tipp.get("punkte_result")
+                if punkte_key == "perfekt":
+                    punkte_info = f'<div class="tipp-result-line gewonnen">🎯 Perfekt! +1000 🪙</div>'
+                elif punkte_key == "tendenz_tor":
+                    punkte_info = f'<div class="tipp-result-line gewonnen">⚡ Tordifferenz! +500 🪙</div>'
+                elif punkte_key == "tendenz":
+                    punkte_info = f'<div class="tipp-result-line gewonnen">✅ Tendenz! +200 🪙</div>'
+                elif punkte_key == "falsch":
+                    punkte_info = f'<div class="tipp-result-line verloren">❌ Leider falsch</div>'
+            tipp_html = f'<div class="tipp-row"><div class="tipp-saved-with-result"><div class="tipp-saved">✅ {td["heim"]} : {td["gast"]}</div>{punkte_info}</div></div>'
+        elif status == "live":
+            tipp_html = f'<div class="tipp-row"><span class="locked-badge">🔴 Läuft gerade</span></div>'
+        elif status == "final":
+            tipp_html = f'<div class="tipp-row"><span style="font-size:12px;color:var(--muted);font-family:\'Barlow Condensed\';font-weight:700;">— Kein Tipp</span></div>'
         elif not erlaubt:
             tipp_html = f'<div class="tipp-row"><span class="locked-badge">🔒 Gesperrt</span></div>'
-        elif min_bis <= 60:
-            tipp_html = f"""<form action="/submittipp" method="POST" style="display:inline;">
-              <input type="hidden" name="spiel_id" value="{sid}">
-              <input type="hidden" name="redirect_gruppe" value="{gruppe_id}">
-              <div class="tipp-row">
-                <input type="number" name="tipp_heim" min="0" max="20" class="score-input" placeholder="0" required>
-                <span class="score-sep">:</span>
-                <input type="number" name="tipp_gast" min="0" max="20" class="score-input" placeholder="0" required>
-                <button type="submit" class="tipp-btn">⏰ Jetzt! (-50🪙)</button>
-              </div>
-            </form>"""
         else:
+            btn_label = "⏰ Jetzt! (-50🪙)" if min_bis <= 60 else "Tippen (-50🪙)"
             tipp_html = f"""<form action="/submittipp" method="POST" style="display:inline;">
               <input type="hidden" name="spiel_id" value="{sid}">
               <input type="hidden" name="redirect_gruppe" value="{gruppe_id}">
@@ -1143,22 +1460,20 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
                 <input type="number" name="tipp_heim" min="0" max="20" class="score-input" placeholder="0" required>
                 <span class="score-sep">:</span>
                 <input type="number" name="tipp_gast" min="0" max="20" class="score-input" placeholder="0" required>
-                <button type="submit" class="tipp-btn">Tippen (-50🪙)</button>
+                <button type="submit" class="tipp-btn">{btn_label}</button>
               </div>
             </form>"""
 
         deadline_notice = ""
-        if not tipp and not erlaubt:
-            deadline_notice = ""
-        elif not tipp and 0 < min_bis <= PUNKTE_SYSTEM["deadline_min"]:
-            deadline_notice = f'<span class="soon-badge">⚠️ Noch {min_bis} Min!</span>'
+        if not tipp and status == "soon":
+            deadline_notice = f'<span class="soon-badge">⚠️ Noch {max(0, min_bis)} Min!</span>'
 
         spiele_html += f"""
-        <div class="match-card {tipped_class}">
+        <div class="match-card {card_class.replace('match-card ', '')}" id="spiel-{sid}">
           <div class="match-team-home">
             <div class="team-name-row home">{spiel['heim']} {flag_img(heim_code, 24)}</div>
           </div>
-          <div class="match-vs">VS</div>
+          {vs_html}
           <div class="match-team-away">
             <div class="team-name-row">{flag_img(gast_code, 24)} {spiel['gast']}</div>
           </div>
@@ -1190,7 +1505,6 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
     <div class="page">
       <div class="wrap">
         <div style="display:grid;grid-template-columns:260px 1fr;gap:20px;margin-bottom:32px;align-items:start;">
-          <!-- SIDEBAR -->
           <div class="card">
             <div style="text-align:center;">
               <img class="mc-head-lg" src="https://mc-heads.net/avatar/{username}/72" alt="{username}">
@@ -1199,11 +1513,10 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
             </div>
             {my_team_html}
           </div>
-          <!-- STATS -->
           <div>
             <div class="stats-grid">
               <div class="stat-card">
-                <div class="stat-num">{points:,}</div>
+                <div class="stat-num" id="my-points">{points:,}</div>
                 <div class="stat-label">🪙 Punkte</div>
               </div>
               <div class="stat-card">
@@ -1225,12 +1538,12 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
           </div>
         </div>
 
-        <!-- TIPPS BEREICH -->
         <div class="sec-title">⚽ Gruppenphase</div>
-        <div class="sec-sub">50 Punkte Einsatz pro Tipp · Sperre 10 Min vor Anpfiff · <a href="/punkte" style="color:var(--gold);text-decoration:none;">Punktesystem ansehen →</a></div>
-        
+        <div class="sec-sub">50 Punkte Einsatz · Sperre bei Anpfiff · Live-Scores aktualisieren automatisch · <a href="/punkte" style="color:var(--gold);text-decoration:none;">Punktesystem →</a></div>
+
+        {live_banner}
         <div class="tabs">{tabs_html}</div>
-        
+
         <div class="card fade-in">
           <div class="gruppe-header">
             <div class="gruppe-letter">{gruppe_id}</div>
@@ -1243,6 +1556,38 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         </div>
       </div>
     </div>
+
+    <!-- Live-Score Polling: alle 30 Sek aktualisieren wenn Live-Spiele laufen -->
+    <script>
+      function checkLiveGames() {{
+        fetch('/api/live_scores').then(r=>r.json()).then(scores => {{
+          let hasLive = false;
+          for (const [sid, data] of Object.entries(scores)) {{
+            if (data.status === 'live' || data.status === 'final') {{
+              hasLive = true;
+              // Seite neu laden wenn Spielstatus sich geändert hat
+              const el = document.getElementById('spiel-' + sid);
+              if (el) {{
+                const isLiveCard = el.classList.contains('live-card');
+                const isFinalCard = el.classList.contains('final-card');
+                if ((data.status === 'live' && !isLiveCard) ||
+                    (data.status === 'final' && !isFinalCard)) {{
+                  window.location.reload();
+                  return;
+                }}
+              }}
+            }}
+          }}
+          // Wenn Live-Spiele laufen, alle 30s neu laden für Score-Updates
+          if (hasLive) {{
+            setTimeout(() => window.location.reload(), 30000);
+          }}
+        }}).catch(()=>{{}});
+      }}
+      // Initial check nach 10 Sek, dann alle 60 Sek
+      setTimeout(checkLiveGames, 10000);
+      setInterval(checkLiveGames, 60000);
+    </script>
     </body></html>"""
 
 @app.route('/dashboard')
@@ -1250,8 +1595,14 @@ def dashboard():
     if "username" not in session:
         return redirect(url_for('home'))
     username = session["username"]
+    # WICHTIG: User aus DB laden falls nicht da (sollte durch persistente Speicherung nicht passieren)
     if username not in user_db:
-        user_db[username] = {"points": 1000, "tipps": {}, "lieblingsteam": None}
+        # Prüfen ob User in DB-Datei existiert
+        load_data()
+        if username not in user_db:
+            # User wirklich nicht da – neu registrieren
+            return redirect(url_for('home'))
+    # Lieblingsteam-Gruppe oder A als Default
     mein_team = next((t for t in ALLE_TEAMS if t["name"] == user_db[username].get("lieblingsteam")), None)
     aktive_gruppe = mein_team["gruppe"] if mein_team else "A"
     return render_gruppe_page(username, aktive_gruppe, "dashboard")
@@ -1262,7 +1613,9 @@ def gruppe_ansicht(gruppe_id):
         return redirect(url_for('home'))
     username = session["username"]
     if username not in user_db:
-        user_db[username] = {"points": 1000, "tipps": {}, "lieblingsteam": None}
+        load_data()
+        if username not in user_db:
+            return redirect(url_for('home'))
     gruppe_id = gruppe_id.upper()
     if gruppe_id not in WM_GRUPPEN:
         return redirect(url_for('dashboard'))
@@ -1278,26 +1631,18 @@ def leaderboard():
     username = session["username"]
     user_info = user_db.get(username, {"points": 1000, "tipps": {}, "lieblingsteam": None})
     navbar = get_navbar(username, user_info["points"], user_info.get("lieblingsteam"), "leaderboard")
-    
     lb = get_leaderboard()
-    
     medals = {1: ("🥇", "r1"), 2: ("🥈", "r2"), 3: ("🥉", "r3")}
-    
     rows_html = ""
     for i, entry in enumerate(lb, 1):
         rank_class = f"rank-{i}" if i <= 3 else ""
         is_me = (entry["username"] == username)
-        if is_me:
-            rank_class += " rank-me"
-        
+        if is_me: rank_class += " rank-me"
         medal, rank_color = medals.get(i, ("", ""))
         rank_display = f'<span class="lb-rank {rank_color}">{medal or str(i)}</span>'
-        
         team = next((t for t in ALLE_TEAMS if t["name"] == entry.get("lieblingsteam")), None)
         team_html = f'{flag_img(team["code"], 16)} {team["name"]}' if team else ""
-        
         me_indicator = " 👈 Du" if is_me else ""
-        
         rows_html += f"""
         <div class="lb-row {rank_class}">
           {rank_display}
@@ -1311,11 +1656,8 @@ def leaderboard():
           <div class="lb-tipps">{entry['tipps']} Tipps</div>
           <div class="lb-pts">{entry['points']:,}</div>
         </div>"""
-    
     if not lb:
         rows_html = '<div style="text-align:center;color:var(--muted);padding:40px;">Noch keine Spieler registriert.</div>'
-    
-    # Mein Rang
     my_rank = next((i+1 for i, e in enumerate(lb) if e["username"] == username), None)
     my_rank_txt = f"Platz {my_rank} von {len(lb)}" if my_rank else "–"
 
@@ -1328,8 +1670,6 @@ def leaderboard():
           <div class="sec-title" style="font-size:40px;">Leaderboard</div>
           <div class="sec-sub">Dein Rang: <strong style="color:var(--gold);">{my_rank_txt}</strong></div>
         </div>
-        
-        <!-- TOP 3 PODEST -->
         {"" if len(lb) < 3 else f'''
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:32px;text-align:center;">
           <div class="card" style="order:1;margin-top:20px;border-color:rgba(192,192,192,0.3);">
@@ -1352,17 +1692,12 @@ def leaderboard():
           </div>
         </div>
         ''' if len(lb) >= 3 else ""}
-        
-        <!-- FULL TABLE -->
         <div class="card">
           <div style="display:grid;grid-template-columns:48px 1fr 80px 80px;gap:12px;
                padding:8px 16px;margin-bottom:8px;
-               font-family:\'Barlow Condensed\';font-weight:700;font-size:11px;
+               font-family:'Barlow Condensed';font-weight:700;font-size:11px;
                letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;">
-            <div>Rang</div>
-            <div>Spieler</div>
-            <div style="text-align:center;">Tipps</div>
-            <div style="text-align:right;">Punkte</div>
+            <div>Rang</div><div>Spieler</div><div style="text-align:center;">Tipps</div><div style="text-align:right;">Punkte</div>
           </div>
           {rows_html}
         </div>
@@ -1371,7 +1706,7 @@ def leaderboard():
     </body></html>"""
 
 # ==========================================
-# PUNKTE-SYSTEM SEITE
+# PUNKTE-SYSTEM
 # ==========================================
 @app.route('/punkte')
 def punkte():
@@ -1380,7 +1715,6 @@ def punkte():
     username = session["username"]
     user_info = user_db.get(username, {"points": 1000, "tipps": {}, "lieblingsteam": None})
     navbar = get_navbar(username, user_info["points"], user_info.get("lieblingsteam"), "punkte")
-    
     return BASE_HTML + f"""
     {navbar}
     <div class="page">
@@ -1390,72 +1724,46 @@ def punkte():
           <div class="sec-title" style="font-size:40px;">Wie werden Punkte vergeben?</div>
           <div class="sec-sub">Jeder Tipp kostet 50 Punkte. Bei richtiger Vorhersage bekommst du Punkte zurück – und mehr!</div>
         </div>
-        
         <div class="card" style="margin-bottom:20px;">
           <div style="font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;margin-bottom:4px;color:var(--gold);">🎯 TREFFERQUOTEN</div>
           <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">Punkte werden nach Spielschluss automatisch gutgeschrieben</div>
           <div class="punkte-grid">
             <div class="punkte-row perfekt">
-              <div>
-                <div style="font-weight:700;font-size:15px;">🎯 Perfektes Ergebnis</div>
-                <div style="font-size:12px;color:var(--muted);margin-top:2px;">z.B. Tipp 2:1 → Ergebnis 2:1</div>
-              </div>
+              <div><div style="font-weight:700;font-size:15px;">🎯 Perfektes Ergebnis</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">z.B. Tipp 2:1 → Ergebnis 2:1</div></div>
               <div class="punkte-val">+1.000</div>
             </div>
             <div class="punkte-row">
-              <div>
-                <div style="font-weight:700;font-size:15px;">⚡ Richtige Tordifferenz</div>
-                <div style="font-size:12px;color:var(--muted);margin-top:2px;">z.B. Tipp 3:1 → Ergebnis 2:0 (beide +2)</div>
-              </div>
+              <div><div style="font-weight:700;font-size:15px;">⚡ Richtige Tordifferenz</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">z.B. Tipp 3:1 → Ergebnis 2:0</div></div>
               <div class="punkte-val">+500</div>
             </div>
             <div class="punkte-row">
-              <div>
-                <div style="font-weight:700;font-size:15px;">✅ Richtige Tendenz</div>
-                <div style="font-size:12px;color:var(--muted);margin-top:2px;">Sieg / Unentschieden / Niederlage korrekt</div>
-              </div>
+              <div><div style="font-weight:700;font-size:15px;">✅ Richtige Tendenz</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Sieg / Unentschieden / Niederlage</div></div>
               <div class="punkte-val">+200</div>
             </div>
             <div class="punkte-row" style="border-color:rgba(255,23,68,0.2);background:rgba(255,23,68,0.03);">
-              <div>
-                <div style="font-weight:700;font-size:15px;">❌ Falsch getippt</div>
-                <div style="font-size:12px;color:var(--muted);margin-top:2px;">Falsche Tendenz</div>
-              </div>
+              <div><div style="font-weight:700;font-size:15px;">❌ Falsch getippt</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Falsche Tendenz</div></div>
               <div class="punkte-val" style="background:linear-gradient(135deg,var(--red),#ff6b6b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">0</div>
             </div>
           </div>
         </div>
-
         <div class="card" style="margin-bottom:20px;">
           <div style="font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;margin-bottom:4px;color:var(--gold);">💰 EINSATZ & STARTKAPITAL</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
-            <div class="punkte-row">
-              <div style="font-weight:700;">Startpunkte (neu)</div>
-              <div class="punkte-val">1.000</div>
-            </div>
-            <div class="punkte-row" style="border-color:rgba(255,23,68,0.2);">
-              <div style="font-weight:700;">Einsatz pro Tipp</div>
-              <div class="punkte-val" style="background:linear-gradient(135deg,var(--red),#ff6b6b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">-50</div>
-            </div>
+            <div class="punkte-row"><div style="font-weight:700;">Startpunkte (neu)</div><div class="punkte-val">1.000</div></div>
+            <div class="punkte-row" style="border-color:rgba(255,23,68,0.2);"><div style="font-weight:700;">Einsatz pro Tipp</div><div class="punkte-val" style="background:linear-gradient(135deg,var(--red),#ff6b6b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">-50</div></div>
           </div>
         </div>
-        
         <div class="card">
-          <div style="font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;margin-bottom:4px;color:var(--gold);">⏰ TIPP-DEADLINE</div>
+          <div style="font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;margin-bottom:4px;color:var(--gold);">🔴 TIPP-SPERRE</div>
           <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">Wann ist Schluss mit Tippen?</div>
-          <div class="punkte-row" style="border-color:rgba(255,165,0,0.3);background:rgba(255,165,0,0.04);">
-            <div>
-              <div style="font-weight:700;font-size:15px;">🔒 Sperre vor Spielbeginn</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px;">10 Minuten vor Anpfiff wird das Tippen gesperrt</div>
-            </div>
-            <div style="font-family:'Bebas Neue';font-size:24px;color:var(--gold2);">10 MIN</div>
+          <div class="punkte-row" style="border-color:rgba(255,68,68,0.3);background:rgba(255,68,68,0.04);">
+            <div><div style="font-weight:700;font-size:15px;">🔒 Sperre bei Spielbeginn</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Sobald das Spiel als LIVE erkannt wird, ist Tippen gesperrt</div></div>
+            <div style="font-family:'Bebas Neue';font-size:24px;color:var(--live);">LIVE</div>
           </div>
           <div style="margin-top:14px;padding:12px 16px;background:var(--dark3);border-radius:8px;font-size:13px;color:var(--muted);line-height:1.7;">
-            💡 <strong style="color:var(--text);">Tipp:</strong> Tippe früh – bei Spielen kurz vor der Deadline wird ein Warnsymbol angezeigt.<br>
-            Bereits gesetzte Tipps können nicht mehr geändert werden.
+            💡 <strong style="color:var(--text);">Live-Scores:</strong> Während Spiele laufen, siehst du den Echtzeit-Spielstand direkt in der Übersicht. Die Seite aktualisiert sich automatisch alle 30 Sekunden bei laufenden Spielen.
           </div>
         </div>
-        
         <div style="margin-top:20px;text-align:center;">
           <a href="/dashboard" class="btn btn-gold">⚽ Jetzt tippen</a>
         </div>
@@ -1475,82 +1783,98 @@ def submit_tipp():
     tipp_heim = request.form.get("tipp_heim", "0")
     tipp_gast = request.form.get("tipp_gast", "0")
     redirect_gruppe = request.form.get("redirect_gruppe")
-    
+
     if username not in user_db:
         user_db[username] = {"points": 1000, "tipps": {}, "lieblingsteam": None}
-    
+
     spiel_gefunden = None
     for gruppe_data in WM_GRUPPEN.values():
         for spiel in gruppe_data["spiele"]:
             if spiel["id"] == spiel_id:
                 spiel_gefunden = spiel
                 break
-    
+
     if spiel_gefunden and spiel_id not in user_db[username]["tipps"]:
-        if not tipp_erlaubt(spiel_gefunden):
-            # Zu spät – Tipp wird abgelehnt
-            pass
+        status = get_spiel_status(spiel_gefunden)
+        if status not in ("upcoming", "soon"):
+            pass  # Zu spät
         elif user_db[username]["points"] >= PUNKTE_SYSTEM["einsatz"]:
             user_db[username]["points"] -= PUNKTE_SYSTEM["einsatz"]
             user_db[username]["tipps"][spiel_id] = {
                 "heim": int(tipp_heim),
                 "gast": int(tipp_gast)
             }
-    
+            save_data()  # Sofort speichern!
+
     if redirect_gruppe:
         return redirect(url_for('gruppe_ansicht', gruppe_id=redirect_gruppe))
     return redirect(url_for('dashboard'))
 
 # ==========================================
 # AUSWERTUNG (Admin-Route)
-# Aufruf: /auswertung?key=ADMIN1337&spiel_id=A1&heim=2&gast=1
+# /auswertung?key=ADMIN1337&spiel_id=A1&heim=2&gast=1
 # ==========================================
 @app.route('/auswertung')
 def auswertung():
     key = request.args.get("key","")
     if key != "ADMIN1337":
         return "Kein Zugriff", 403
-    
+
     spiel_id = request.args.get("spiel_id")
     heim_tore = int(request.args.get("heim", 0))
     gast_tore = int(request.args.get("gast", 0))
-    
+
     if not spiel_id:
         return "spiel_id fehlt", 400
-    
-    # Tendenz bestimmen
+
     def tendenz(h, g):
         if h > g: return "H"
         if h < g: return "G"
         return "U"
-    
+
     echte_tendenz = tendenz(heim_tore, gast_tore)
     echte_diff = heim_tore - gast_tore
     auswertungen = []
-    
+
     for uname, data in user_db.items():
         tipp = data.get("tipps", {}).get(spiel_id)
         if not tipp:
             continue
         th, tg = tipp["heim"], tipp["gast"]
-        
+
         if th == heim_tore and tg == gast_tore:
-            punkte = PUNKTE_SYSTEM["perfekt"]
+            punkte_val = PUNKTE_SYSTEM["perfekt"]
             ergebnis = "perfekt"
         elif tendenz(th, tg) == echte_tendenz and (th - tg) == echte_diff:
-            punkte = PUNKTE_SYSTEM["tendenz_tor"]
-            ergebnis = "tordifferenz"
+            punkte_val = PUNKTE_SYSTEM["tendenz_tor"]
+            ergebnis = "tendenz_tor"
         elif tendenz(th, tg) == echte_tendenz:
-            punkte = PUNKTE_SYSTEM["tendenz"]
+            punkte_val = PUNKTE_SYSTEM["tendenz"]
             ergebnis = "tendenz"
         else:
-            punkte = PUNKTE_SYSTEM["falsch"]
+            punkte_val = PUNKTE_SYSTEM["falsch"]
             ergebnis = "falsch"
-        
-        user_db[uname]["points"] = user_db[uname].get("points", 0) + punkte
-        auswertungen.append(f"{uname}: {th}:{tg} → {ergebnis} (+{punkte})")
-    
-    return f"Auswertung {spiel_id} ({heim_tore}:{gast_tore}):<br>" + "<br>".join(auswertungen)
+
+        user_db[uname]["points"] = user_db[uname].get("points", 0) + punkte_val
+        # Ergebnis im Tipp speichern
+        user_db[uname]["tipps"][spiel_id]["punkte_result"] = ergebnis
+        auswertungen.append(f"{uname}: {th}:{tg} → {ergebnis} (+{punkte_val})")
+
+    save_data()  # Nach Auswertung speichern!
+
+    return f"<pre>Auswertung {spiel_id} ({heim_tore}:{gast_tore}):\n" + "\n".join(auswertungen) + "\n\nGespeichert!</pre>"
+
+# NEU: Admin-Übersicht aller User
+@app.route('/admin')
+def admin():
+    key = request.args.get("key","")
+    if key != "ADMIN1337":
+        return "Kein Zugriff", 403
+    output = f"<h2>WM 2026 Admin – {len(user_db)} Spieler</h2><pre>"
+    for uname, data in sorted(user_db.items(), key=lambda x: -x[1].get("points",0)):
+        output += f"{uname}: {data.get('points',0)} Punkte, {len(data.get('tipps',{}))} Tipps\n"
+    output += "</pre>"
+    return output
 
 @app.route('/logout')
 def logout():
@@ -1558,11 +1882,14 @@ def logout():
     return redirect(url_for('home'))
 
 if __name__ == '__main__':
-    print("\n" + "="*55)
+    print("\n" + "="*60)
     print("   🏆  WM 2026 GRIEFERGAMES TIPP-PORTAL  🏆   ")
-    print("="*55)
+    print("="*60)
+    print(f"   Daten werden gespeichert in: {os.path.abspath(DATA_FILE)}")
+    print(f"   Live-Scores Cache: {os.path.abspath(LIVESCORES_CACHE_FILE)}")
+    print(f"   Geladene Spieler: {len(user_db)}")
     print("   Starte auf: http://127.0.0.1:5005")
-    print("="*55 + "\n")
+    print("="*60 + "\n")
     try:
         port = int(os.environ.get('PORT', 5005))
         host = '0.0.0.0' if os.environ.get('PORT') else '127.0.0.1'
