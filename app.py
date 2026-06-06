@@ -551,837 +551,668 @@ def minecraft_log_reader():
 threading.Thread(target=minecraft_log_reader, daemon=True).start()
 
 # ==========================================
-# ██████╗ ███████╗███████╗██╗ ██████╗ ███╗   ██╗
-# ██╔══██╗██╔════╝██╔════╝██║██╔════╝ ████╗  ██║
-# ██║  ██║█████╗  ███████╗██║██║  ███╗██╔██╗ ██║
-# ██║  ██║██╔══╝  ╚════██║██║██║   ██║██║╚██╗██║
-# ██████╔╝███████╗███████║██║╚██████╔╝██║ ╚████║
-# ╚═════╝ ╚══════╝╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+# DESIGN SYSTEM — WM 2026 ULTRA
 # ==========================================
 
 BASE_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,700&family=Barlow+Condensed:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Exo+2:ital,wght@0,300;0,400;0,600;0,700;0,800;0,900;1,700&family=Rajdhani:wght@400;500;600;700&display=swap');
 
 :root {
-  /* WM 2026 Palette – Feuer & Stadion-Nacht */
-  --pitch:    #0a3d1f;
-  --pitch2:   #0d4a26;
-  --gold:     #FFD700;
-  --gold2:    #FFA500;
-  --gold3:    #FFE44D;
-  --amber:    #FF8C00;
-  --fire1:    #FF4500;
-  --fire2:    #FF6B35;
-  --neon:     #00FF88;
-  --neon2:    #00CC6A;
-  --cyan:     #00D4FF;
-  --live:     #FF3030;
-  --live2:    #FF6060;
-
-  --bg:       #060A0F;
-  --bg2:      #080D15;
-  --bg3:      #0B1220;
-  --card:     #0E1628;
-  --card2:    #111C32;
-  --card3:    #162240;
-
-  --border:   rgba(255,215,0,0.12);
-  --border2:  rgba(255,255,255,0.06);
-  --border3:  rgba(255,255,255,0.03);
-
-  --text:     #F0F4FF;
-  --text2:    #A8B8D8;
-  --muted:    #4A5A7A;
-
-  --r1: #FFD700;
-  --r2: #C8D0E0;
-  --r3: #CD8C50;
+  --g1: #0a0e1a;
+  --g2: #0d1220;
+  --g3: #111828;
+  --g4: #161f35;
+  --g5: #1c2a45;
+  --card: #131a2e;
+  --card2: #0f1525;
+  --gold: #f5c842;
+  --gold2: #e8b020;
+  --gold3: #ffd966;
+  --copper: #e07b39;
+  --fire: #ff5722;
+  --fire2: #ff7043;
+  --neon: #00e5a0;
+  --neon2: #00c580;
+  --sky: #29b6f6;
+  --live: #f44336;
+  --live2: #ef9a9a;
+  --border: rgba(245,200,66,0.15);
+  --border2: rgba(255,255,255,0.07);
+  --border3: rgba(255,255,255,0.04);
+  --text: #eaf0ff;
+  --text2: #8fa0c0;
+  --muted: #3d4f6e;
+  --r1: #f5c842;
+  --r2: #b8cce0;
+  --r3: #cd8b4a;
 }
 
-*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-html { scroll-behavior:smooth; }
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Barlow', sans-serif;
-  min-height: 100vh;
-  overflow-x: hidden;
+body{
+  background:var(--g1);
+  color:var(--text);
+  font-family:'Exo 2',sans-serif;
+  min-height:100vh;
+  overflow-x:hidden;
 }
 
-/* ═══════════════════════════════════════
-   BACKGROUND – Stadionrasen-Textur + Atmosphäre
-═══════════════════════════════════════ */
-body::before {
-  content: '';
-  position: fixed; inset: 0; z-index: 0;
+/* ── ANIMATED BG FIELD ── */
+body::before{
+  content:'';
+  position:fixed;inset:0;z-index:0;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,255,136,0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 10% 60%, rgba(255,165,0,0.03) 0%, transparent 50%),
-    radial-gradient(ellipse 60% 40% at 90% 80%, rgba(0,212,255,0.03) 0%, transparent 50%),
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 60px,
-      rgba(0,255,136,0.012) 60px,
-      rgba(0,255,136,0.012) 61px
-    );
-  pointer-events: none;
+    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(0,229,160,0.06) 0%,transparent 55%),
+    radial-gradient(ellipse 80% 50% at 5% 70%, rgba(41,182,246,0.04) 0%,transparent 45%),
+    radial-gradient(ellipse 60% 50% at 95% 30%, rgba(245,200,66,0.04) 0%,transparent 45%),
+    repeating-linear-gradient(0deg,transparent,transparent 44px,rgba(0,229,160,0.018) 44px,rgba(0,229,160,0.018) 45px),
+    repeating-linear-gradient(90deg,transparent,transparent 80px,rgba(0,229,160,0.01) 80px,rgba(0,229,160,0.01) 81px);
+  pointer-events:none;
+  animation:bgPulse 12s ease-in-out infinite;
+}
+@keyframes bgPulse{
+  0%,100%{opacity:1}
+  50%{opacity:0.7}
 }
 
-/* ═══════════════════════════════════════
-   PARTICLES / CONFETTI (JS-powered)
-═══════════════════════════════════════ */
-.particle-canvas {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+/* ── FLOATING ORBS ── */
+body::after{
+  content:'';
+  position:fixed;
+  width:600px;height:600px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(245,200,66,0.04) 0%,transparent 70%);
+  top:-200px;right:-200px;
+  pointer-events:none;
+  animation:orbFloat 20s ease-in-out infinite;
+  z-index:0;
+}
+@keyframes orbFloat{
+  0%,100%{transform:translate(0,0) scale(1)}
+  33%{transform:translate(-60px,40px) scale(1.1)}
+  66%{transform:translate(30px,-50px) scale(0.9)}
 }
 
-/* ═══════════════════════════════════════
-   NAVBAR
-═══════════════════════════════════════ */
-.navbar {
-  position: sticky; top: 0; z-index: 500;
-  height: 64px;
-  display: flex; align-items: center;
-  padding: 0 32px; gap: 24px;
-  background: rgba(6,10,15,0.92);
-  border-bottom: 1px solid rgba(255,215,0,0.08);
-  backdrop-filter: blur(24px) saturate(2);
+/* ── NAVBAR ── */
+.navbar{
+  position:sticky;top:0;z-index:900;
+  height:62px;
+  display:flex;align-items:center;gap:20px;padding:0 28px;
+  background:rgba(10,14,26,0.95);
+  border-bottom:1px solid rgba(245,200,66,0.12);
+  backdrop-filter:blur(32px) saturate(180%);
 }
+.navbar::after{
+  content:'';
+  position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(245,200,66,0.4),transparent);
+  animation:scanline 6s linear infinite;
+}
+@keyframes scanline{
+  0%{background-position:0% 0%}
+  100%{background-position:200% 0%}
+}
+.nb-logo-wrap{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.nb-icon{
+  width:34px;height:34px;
+  background:linear-gradient(135deg,var(--gold),var(--copper));
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;
+  box-shadow:0 0 16px rgba(245,200,66,0.35);
+  animation:iconPulse 3s ease-in-out infinite;
+}
+@keyframes iconPulse{0%,100%{box-shadow:0 0 16px rgba(245,200,66,0.35)}50%{box-shadow:0 0 28px rgba(245,200,66,0.6)}}
+.nb-title{
+  font-family:'Bebas Neue';font-size:22px;letter-spacing:4px;
+  background:linear-gradient(90deg,var(--gold3),var(--gold),var(--copper));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.nb-sep{width:1px;height:26px;background:rgba(255,255,255,0.07);flex-shrink:0;}
+.nb-links{display:flex;gap:2px;}
+.nb-link{
+  padding:6px 14px;border-radius:7px;text-decoration:none;
+  font-family:'Rajdhani';font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--muted);transition:all .15s;position:relative;
+}
+.nb-link:hover{color:var(--text2);background:rgba(255,255,255,0.04);}
+.nb-link.active{color:var(--gold);}
+.nb-link.active::after{
+  content:'';position:absolute;bottom:4px;left:14px;right:14px;
+  height:2px;background:linear-gradient(90deg,var(--gold),var(--copper));
+  border-radius:1px;
+}
+.nb-right{display:flex;align-items:center;gap:10px;margin-left:auto;}
+.nb-coins{
+  display:flex;align-items:center;gap:7px;
+  background:linear-gradient(135deg,rgba(245,200,66,0.14),rgba(224,123,57,0.08));
+  border:1px solid rgba(245,200,66,0.3);border-radius:20px;
+  padding:5px 14px 5px 8px;
+  font-family:'Bebas Neue';font-size:17px;letter-spacing:2px;color:var(--gold);
+}
+.coin-dot{
+  width:20px;height:20px;background:linear-gradient(135deg,var(--gold3),var(--copper));
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:900;color:#000;flex-shrink:0;
+  box-shadow:0 0 8px rgba(245,200,66,0.4);
+}
+.nb-avatar{width:30px;height:30px;border-radius:7px;image-rendering:pixelated;border:2px solid rgba(245,200,66,0.3);}
+.nb-user{font-family:'Rajdhani';font-weight:700;font-size:15px;letter-spacing:.5px;}
+.nb-logout{
+  font-size:12px;color:var(--muted);text-decoration:none;
+  padding:5px 11px;border-radius:6px;border:1px solid transparent;
+  transition:all .2s;font-family:'Rajdhani';font-weight:600;letter-spacing:.5px;
+}
+.nb-logout:hover{color:var(--fire);border-color:rgba(255,87,34,0.35);background:rgba(255,87,34,0.06);}
 
-.nav-logo-wrap {
-  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+/* ── HERO ── */
+.hero{
+  padding:90px 20px 80px;
+  text-align:center;
+  position:relative;z-index:1;
+  overflow:hidden;
 }
-.nav-ball {
-  font-size: 22px;
-  animation: ball-spin 8s linear infinite;
-}
-@keyframes ball-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-.nav-logo {
-  font-family: 'Oswald'; font-weight: 700; font-size: 18px;
-  letter-spacing: 5px; text-transform: uppercase;
-  background: linear-gradient(90deg, var(--gold3), var(--amber));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-.nav-sep { width: 1px; height: 28px; background: rgba(255,255,255,0.06); flex-shrink: 0; }
-
-.nav-links { display: flex; gap: 2px; flex: 1; }
-.nav-link {
-  padding: 6px 14px; border-radius: 8px; text-decoration: none;
-  font-family: 'Barlow Condensed'; font-weight: 700; font-size: 14px; letter-spacing: 1px;
-  text-transform: uppercase; color: var(--muted); transition: all 0.15s;
-  position: relative;
-}
-.nav-link::after {
-  content: ''; position: absolute; bottom: 2px; left: 14px; right: 14px;
-  height: 2px; background: var(--gold); border-radius: 2px;
-  transform: scaleX(0); transition: transform 0.2s;
-}
-.nav-link:hover { color: var(--text2); background: rgba(255,255,255,0.04); }
-.nav-link.active { color: var(--gold); }
-.nav-link.active::after { transform: scaleX(1); }
-
-.nav-right { display: flex; align-items: center; gap: 12px; margin-left: auto; }
-.nav-coins {
-  display: flex; align-items: center; gap: 6px;
-  background: linear-gradient(135deg, rgba(255,215,0,0.12), rgba(255,140,0,0.08));
-  border: 1px solid rgba(255,215,0,0.25); border-radius: 24px;
-  padding: 5px 14px 5px 10px; font-weight: 800; font-size: 14px; color: var(--gold);
-  font-family: 'Oswald'; letter-spacing: 1px;
-}
-.coin-icon {
-  width: 20px; height: 20px; background: linear-gradient(135deg, var(--gold3), var(--amber));
-  border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
-  font-size: 11px; color: #000;
-}
-.nav-head { width: 32px; height: 32px; border-radius: 6px; image-rendering: pixelated; border: 2px solid rgba(255,215,0,0.3); }
-.nav-user { font-family: 'Barlow Condensed'; font-weight: 700; font-size: 15px; letter-spacing: 0.5px; }
-.nav-logout {
-  font-size: 12px; color: var(--muted); text-decoration: none;
-  padding: 5px 10px; border-radius: 6px; border: 1px solid transparent;
-  transition: all 0.2s; font-family: 'Barlow Condensed'; letter-spacing: 0.5px;
-}
-.nav-logout:hover { color: var(--fire1); border-color: rgba(255,69,0,0.3); background: rgba(255,69,0,0.06); }
-
-/* ═══════════════════════════════════════
-   HERO
-═══════════════════════════════════════ */
-.hero {
-  text-align: center; padding: 100px 20px 80px;
-  position: relative; z-index: 1; overflow: hidden;
-}
-.hero-pitch-lines {
-  position: absolute; inset: 0; z-index: 0;
+.hero-field{
+  position:absolute;inset:0;
   background:
-    repeating-linear-gradient(90deg,
-      transparent, transparent 80px,
-      rgba(0,255,136,0.025) 80px, rgba(0,255,136,0.025) 81px
-    ),
-    repeating-linear-gradient(0deg,
-      transparent, transparent 80px,
-      rgba(0,255,136,0.015) 80px, rgba(0,255,136,0.015) 81px
-    );
+    linear-gradient(180deg,transparent 60%,rgba(10,14,26,0.8) 100%),
+    repeating-linear-gradient(90deg,transparent,transparent 100px,rgba(0,229,160,0.03) 100px,rgba(0,229,160,0.03) 101px),
+    repeating-linear-gradient(0deg,transparent,transparent 100px,rgba(0,229,160,0.02) 100px,rgba(0,229,160,0.02) 101px);
 }
-.hero-eyebrow {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-family: 'Barlow Condensed'; font-weight: 800; font-size: 11px;
-  letter-spacing: 4px; text-transform: uppercase; color: var(--neon);
-  background: rgba(0,255,136,0.06); border: 1px solid rgba(0,255,136,0.2);
-  padding: 7px 20px; border-radius: 100px; margin-bottom: 32px;
+.hero-chip{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:'Rajdhani';font-weight:700;font-size:11px;letter-spacing:4px;text-transform:uppercase;
+  color:var(--neon);border:1px solid rgba(0,229,160,0.3);
+  background:rgba(0,229,160,0.07);
+  padding:7px 20px;border-radius:100px;margin-bottom:28px;
+  animation:chipGlow 3s ease-in-out infinite;
 }
-.hero-title {
-  font-family: 'Oswald'; font-weight: 700;
-  font-size: clamp(72px, 13vw, 150px); line-height: 0.85;
-  letter-spacing: -2px;
-  background: linear-gradient(170deg, #ffffff 0%, var(--gold3) 40%, var(--amber) 70%, var(--fire1) 100%);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  margin-bottom: 26px; position: relative; z-index: 1;
-  text-shadow: none;
+@keyframes chipGlow{0%,100%{box-shadow:0 0 0 0 rgba(0,229,160,0)}50%{box-shadow:0 0 20px rgba(0,229,160,0.2)}}
+.hero-h1{
+  font-family:'Bebas Neue';
+  font-size:clamp(70px,14vw,160px);line-height:.85;
+  letter-spacing:4px;
+  position:relative;z-index:1;
+  margin-bottom:24px;
 }
-.hero-title-glow {
-  position: absolute; inset: 0; z-index: -1;
-  font-family: 'Oswald'; font-weight: 700;
-  font-size: clamp(72px, 13vw, 150px); line-height: 0.85;
-  letter-spacing: -2px; color: transparent;
-  -webkit-text-stroke: 1px rgba(255,215,0,0.1);
-  filter: blur(20px);
+.hero-h1-inner{
+  background:linear-gradient(170deg,#ffffff 0%,var(--gold3) 35%,var(--gold2) 60%,var(--copper) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  display:block;
+  animation:titleShimmer 4s ease-in-out infinite;
+  background-size:200% 200%;
 }
-.hero-sub {
-  color: var(--text2); font-size: 17px; max-width: 460px;
-  margin: 0 auto 50px; line-height: 1.8; font-weight: 500;
+@keyframes titleShimmer{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+.hero-h1-shadow{
+  position:absolute;inset:0;
+  font-family:'Bebas Neue';
+  font-size:clamp(70px,14vw,160px);line-height:.85;
+  letter-spacing:4px;
+  color:transparent;
+  -webkit-text-stroke:1px rgba(245,200,66,0.08);
+  filter:blur(24px);z-index:0;
+}
+.hero-sub{
+  color:var(--text2);font-size:16px;font-weight:400;
+  max-width:440px;margin:0 auto 48px;line-height:1.9;
+}
+.hero-ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;}
+
+/* ── BUTTONS ── */
+.btn{
+  display:inline-flex;align-items:center;gap:10px;
+  font-family:'Rajdhani';font-weight:700;font-size:15px;letter-spacing:2px;text-transform:uppercase;
+  text-decoration:none;padding:13px 34px;border-radius:5px;border:none;
+  cursor:pointer;transition:all .2s;position:relative;overflow:hidden;
+}
+.btn::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(45deg,transparent 30%,rgba(255,255,255,0.12) 50%,transparent 70%);
+  transform:translateX(-200%);transition:transform .5s;
+}
+.btn:hover::before{transform:translateX(200%);}
+.btn-primary{
+  background:linear-gradient(135deg,var(--fire2),var(--fire),var(--copper));
+  color:#fff;
+  box-shadow:0 4px 24px rgba(255,87,34,0.4),inset 0 1px 0 rgba(255,255,255,0.1);
+  clip-path:polygon(0 0,calc(100% - 10px) 0,100% 100%,10px 100%);
+}
+.btn-primary:hover{transform:translateY(-3px);box-shadow:0 10px 36px rgba(255,87,34,0.55);}
+.btn-outline{
+  background:transparent;color:var(--neon);
+  border:1.5px solid rgba(0,229,160,0.4);
+  box-shadow:0 0 16px rgba(0,229,160,0.1);
+}
+.btn-outline:hover{background:rgba(0,229,160,0.07);box-shadow:0 0 30px rgba(0,229,160,0.25);}
+.btn-gold{
+  background:linear-gradient(135deg,var(--gold3),var(--gold2));
+  color:#000;font-weight:800;
+}
+.btn-gold:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(245,200,66,0.45);}
+.btn-sm{padding:8px 16px;font-size:12px;letter-spacing:1.5px;border-radius:5px;}
+
+/* ── CARDS ── */
+.card{
+  background:var(--card);
+  border:1px solid var(--border2);
+  border-radius:12px;padding:22px;
+  position:relative;overflow:hidden;
+}
+.card-glow::before{
+  content:'';position:absolute;top:-40px;left:-40px;
+  width:160px;height:160px;border-radius:50%;
+  background:radial-gradient(circle,rgba(245,200,66,0.06) 0%,transparent 70%);
+  pointer-events:none;
 }
 
-/* ═══════════════════════════════════════
-   BUTTONS
-═══════════════════════════════════════ */
-.btn {
-  display: inline-flex; align-items: center; gap: 10px;
-  font-family: 'Barlow Condensed'; font-weight: 800; font-size: 16px;
-  letter-spacing: 2px; text-transform: uppercase; text-decoration: none;
-  padding: 14px 36px; border-radius: 4px; border: none; cursor: pointer;
-  transition: all 0.2s; position: relative; overflow: hidden;
-}
-.btn::after {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.1) 50%, transparent 60%);
-  transform: translateX(-100%); transition: transform 0.4s;
-}
-.btn:hover::after { transform: translateX(100%); }
-.btn-fire {
-  background: linear-gradient(135deg, var(--fire2), var(--fire1), var(--amber));
-  color: #fff; box-shadow: 0 6px 30px rgba(255,69,0,0.4);
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 100%, 12px 100%);
-}
-.btn-fire:hover { transform: translateY(-3px); box-shadow: 0 12px 40px rgba(255,69,0,0.6); }
-.btn-neon {
-  background: transparent; color: var(--neon);
-  border: 2px solid var(--neon); box-shadow: 0 0 20px rgba(0,255,136,0.2);
-}
-.btn-neon:hover { background: rgba(0,255,136,0.08); box-shadow: 0 0 40px rgba(0,255,136,0.4); }
-.btn-gold {
-  background: linear-gradient(135deg, var(--gold3), var(--gold2));
-  color: #000; font-weight: 900;
-}
-.btn-gold:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(255,215,0,0.4); }
+/* ── LAYOUT ── */
+.wrap{max-width:1280px;margin:0 auto;padding:0 28px;position:relative;z-index:1;}
+.wrap-sm{max-width:560px;margin:0 auto;padding:0 24px;position:relative;z-index:1;}
+.page{padding:32px 0 100px;}
 
-/* ═══════════════════════════════════════
-   CARDS
-═══════════════════════════════════════ */
-.card {
-  background: var(--card); border: 1px solid var(--border2);
-  border-radius: 12px; padding: 24px; position: relative; overflow: hidden;
+/* ── SECTION HEADER ── */
+.sec-eyebrow{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:4px;text-transform:uppercase;
+  color:var(--copper);background:rgba(224,123,57,0.09);border:1px solid rgba(224,123,57,0.25);
+  padding:4px 12px;border-radius:4px;margin-bottom:8px;
 }
-.card::before {
-  content: ''; position: absolute; inset: 0; border-radius: 12px;
-  background: linear-gradient(135deg, rgba(255,215,0,0.03) 0%, transparent 60%);
-  pointer-events: none;
+.sec-title{
+  font-family:'Bebas Neue';font-size:36px;letter-spacing:2px;color:var(--text);
+}
+.sec-sub{color:var(--muted);font-size:13px;margin-top:3px;font-weight:500;}
+
+/* ── TABS ── */
+.tabs-wrap{
+  display:flex;gap:4px;flex-wrap:wrap;margin-bottom:18px;
+  padding:5px;background:var(--g3);border-radius:10px;
+  border:1px solid var(--border3);
+}
+.tab{
+  padding:7px 13px;border-radius:7px;cursor:pointer;
+  font-family:'Rajdhani';font-weight:700;font-size:12px;letter-spacing:2px;text-transform:uppercase;
+  white-space:nowrap;transition:all .15s;text-decoration:none;color:var(--muted);
+}
+.tab:hover{color:var(--text2);background:rgba(255,255,255,0.04);}
+.tab.active{
+  background:linear-gradient(135deg,rgba(245,200,66,0.18),rgba(224,123,57,0.1));
+  border:1px solid rgba(245,200,66,0.3);color:var(--gold);
+  box-shadow:0 0 12px rgba(245,200,66,0.08);
 }
 
-/* ═══════════════════════════════════════
-   LAYOUT
-═══════════════════════════════════════ */
-.wrap { max-width: 1260px; margin: 0 auto; padding: 0 28px; position: relative; z-index: 1; }
-.wrap-sm { max-width: 560px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
-.page { padding: 36px 0 120px; }
+/* ── MATCH CARDS ── */
+.match-list{display:flex;flex-direction:column;gap:8px;}
+.match-card{
+  display:grid;
+  grid-template-columns:1fr 180px 1fr 250px;
+  align-items:center;
+  background:var(--card2);
+  border:1px solid var(--border3);
+  border-radius:10px;overflow:hidden;
+  transition:all .2s;position:relative;
+}
+.match-card:hover{
+  border-color:rgba(255,255,255,0.09);
+  transform:translateY(-1px);
+  box-shadow:0 8px 30px rgba(0,0,0,0.5);
+  background:linear-gradient(90deg,rgba(22,31,53,0.8),var(--card2));
+}
+.mc-accent{position:absolute;left:0;top:0;bottom:0;width:3px;}
+.acc-upcoming{background:linear-gradient(180deg,var(--sky),rgba(41,182,246,0.3));}
+.acc-soon{background:linear-gradient(180deg,var(--copper),var(--fire));}
+.acc-live{background:var(--live);animation:accPulse 1s ease-in-out infinite;}
+.acc-final{background:rgba(61,79,110,0.5);}
+.acc-tipped{background:linear-gradient(180deg,var(--neon),rgba(0,229,160,0.3));}
+@keyframes accPulse{0%,100%{opacity:1}50%{opacity:0.2}}
+.match-card.is-live{
+  background:linear-gradient(90deg,rgba(244,67,54,0.07),var(--card2) 50%);
+  border-color:rgba(244,67,54,0.25);
+}
+.match-card.is-final{opacity:.65;}
+.match-card.is-final:hover{opacity:1;}
+.match-card.is-tipped{border-color:rgba(0,229,160,0.18);}
 
-/* ═══════════════════════════════════════
-   SECTION HEADERS
-═══════════════════════════════════════ */
-.sec-header { margin-bottom: 20px; }
-.sec-tag {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-family: 'Barlow Condensed'; font-weight: 800; font-size: 10px;
-  letter-spacing: 4px; text-transform: uppercase; color: var(--amber);
-  background: rgba(255,165,0,0.08); border: 1px solid rgba(255,165,0,0.2);
-  padding: 4px 12px; border-radius: 4px; margin-bottom: 8px;
+.mc-home,.mc-away{
+  padding:14px 18px 14px 22px;
+  display:flex;align-items:center;gap:10px;
 }
-.sec-title {
-  font-family: 'Oswald'; font-weight: 700; font-size: 32px;
-  letter-spacing: 1px; color: var(--text);
-}
-.sec-sub { color: var(--muted); font-size: 13px; margin-top: 4px; font-weight: 500; }
-
-/* ═══════════════════════════════════════
-   TABS
-═══════════════════════════════════════ */
-.tabs-wrap {
-  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;
-  padding: 6px; background: var(--bg3); border-radius: 10px;
-  border: 1px solid var(--border3);
-}
-.tab {
-  padding: 7px 14px; border-radius: 7px; cursor: pointer;
-  font-family: 'Barlow Condensed'; font-weight: 800; font-size: 13px;
-  letter-spacing: 1.5px; text-transform: uppercase;
-  white-space: nowrap; transition: all 0.15s; text-decoration: none;
-  color: var(--muted);
-}
-.tab:hover { color: var(--text2); background: rgba(255,255,255,0.04); }
-.tab.active {
-  background: linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,140,0,0.1));
-  border: 1px solid rgba(255,215,0,0.25); color: var(--gold);
+.mc-home{justify-content:flex-end;flex-direction:row-reverse;}
+.mc-away{justify-content:flex-start;}
+.mc-team-name{
+  font-family:'Rajdhani';font-weight:700;font-size:16px;
+  letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;
 }
 
-/* ═══════════════════════════════════════
-   MATCH CARDS – WM STYLE
-═══════════════════════════════════════ */
-.match-list { display: flex; flex-direction: column; gap: 8px; }
+.mc-mid{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:10px 4px;gap:5px;
+}
+.mc-score-row{display:flex;align-items:center;gap:5px;}
+.mc-num{
+  font-family:'Bebas Neue';font-size:38px;line-height:1;
+  min-width:28px;text-align:center;letter-spacing:1px;
+}
+.mc-colon{font-family:'Bebas Neue';font-size:30px;color:var(--g5);line-height:1;}
+.num-live{color:var(--live2);}
+.num-final{color:var(--text);}
+.num-up{color:var(--muted);font-size:20px;}
 
-.match-card {
-  display: grid;
-  grid-template-columns: 1fr 160px 1fr 240px;
-  align-items: center;
-  background: var(--card2);
-  border: 1px solid var(--border3);
-  border-radius: 10px;
-  overflow: hidden;
-  transition: all 0.2s;
-  position: relative;
+.status-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-family:'Rajdhani';font-weight:700;font-size:9px;letter-spacing:2px;text-transform:uppercase;
+  padding:3px 9px;border-radius:100px;
 }
-.match-card:hover {
-  border-color: rgba(255,255,255,0.08);
-  transform: translateY(-1px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+.sb-live{background:rgba(244,67,54,0.2);border:1px solid rgba(244,67,54,0.45);color:#ef9a9a;}
+.sb-final{background:rgba(61,79,110,0.25);border:1px solid rgba(61,79,110,0.4);color:var(--muted);}
+.sb-soon{background:rgba(224,123,57,0.2);border:1px solid rgba(224,123,57,0.4);color:var(--copper);}
+.sb-up{background:rgba(41,182,246,0.12);border:1px solid rgba(41,182,246,0.25);color:var(--sky);}
+.dot-blink{
+  width:5px;height:5px;border-radius:50%;background:currentColor;
+  animation:dotBlink 1s step-end infinite;
 }
+@keyframes dotBlink{0%,100%{opacity:1}50%{opacity:0}}
 
-/* Color stripe */
-.match-card .mc-stripe {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-}
-.mc-stripe-upcoming { background: rgba(0,212,255,0.5); }
-.mc-stripe-soon { background: var(--amber); }
-.mc-stripe-live { background: var(--live); animation: stripe-pulse 1.2s ease-in-out infinite; }
-.mc-stripe-final { background: rgba(74,90,122,0.4); }
-.mc-stripe-tipped { background: var(--neon); opacity: 0.7; }
+.mc-time{font-family:'Bebas Neue';font-size:20px;color:var(--text2);letter-spacing:2px;}
+.mc-date{font-family:'Rajdhani';font-size:10px;font-weight:700;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;}
+.mc-vs{font-family:'Bebas Neue';font-size:14px;letter-spacing:3px;color:var(--muted);}
 
-@keyframes stripe-pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+.mc-action{padding:12px 16px;}
+.tipp-row{display:flex;align-items:center;gap:5px;justify-content:flex-end;margin-top:4px;}
+.score-in{
+  width:42px;height:38px;
+  background:var(--g3);border:1px solid rgba(255,255,255,0.1);
+  color:#fff;border-radius:7px;text-align:center;
+  font-family:'Bebas Neue';font-size:22px;
+  -moz-appearance:textfield;appearance:none;transition:all .15s;
+}
+.score-in::-webkit-inner-spin-button,.score-in::-webkit-outer-spin-button{-webkit-appearance:none;}
+.score-in:focus{outline:none;border-color:var(--gold);background:var(--g2);box-shadow:0 0 0 3px rgba(245,200,66,0.12);}
+.score-sep{font-family:'Bebas Neue';font-size:20px;color:var(--muted);}
+.tipp-btn{
+  background:linear-gradient(135deg,var(--gold3),var(--gold2));
+  color:#000;border:none;border-radius:6px;
+  padding:7px 13px;font-family:'Rajdhani';font-weight:800;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;
+  cursor:pointer;transition:all .2s;white-space:nowrap;
+}
+.tipp-btn:hover{transform:scale(1.05);box-shadow:0 4px 14px rgba(245,200,66,0.45);}
 
-.match-card.is-live {
-  background: linear-gradient(90deg, rgba(255,48,48,0.06) 0%, var(--card2) 40%);
-  border-color: rgba(255,48,48,0.2);
-}
-.match-card.is-final { opacity: 0.7; }
-.match-card.is-final:hover { opacity: 1; }
-.match-card.is-tipped { border-color: rgba(0,255,136,0.15); }
+.tipp-saved{display:flex;flex-direction:column;align-items:flex-end;gap:3px;}
+.saved-score{font-family:'Bebas Neue';font-size:18px;color:var(--neon);letter-spacing:1px;display:flex;align-items:center;gap:7px;}
+.eval-label{font-family:'Rajdhani';font-size:11px;font-weight:700;letter-spacing:1px;}
+.ev-perfekt{color:var(--gold);}
+.ev-gut{color:var(--neon2);}
+.ev-tendenz{color:var(--sky);}
+.ev-falsch{color:var(--fire);}
+.ev-open{color:var(--muted);}
 
-/* Team cells */
-.mc-team-home, .mc-team-away {
-  padding: 16px 20px 16px 24px;
-  display: flex; align-items: center; gap: 10px;
-}
-.mc-team-home { justify-content: flex-end; flex-direction: row-reverse; }
-.mc-team-away { justify-content: flex-start; }
+.badge-locked{font-family:'Rajdhani';font-size:12px;font-weight:700;color:var(--live);display:flex;align-items:center;gap:5px;}
+.badge-missed{font-family:'Rajdhani';font-size:12px;font-weight:700;color:var(--muted);}
+.badge-warn{font-family:'Rajdhani';font-size:11px;font-weight:700;color:var(--copper);letter-spacing:.5px;}
 
-.mc-team-name {
-  font-family: 'Barlow Condensed'; font-weight: 800; font-size: 16px;
-  letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap;
+/* ── LIVE BANNER ── */
+.live-banner{
+  background:linear-gradient(90deg,rgba(244,67,54,0.14),rgba(244,67,54,0.04));
+  border:1px solid rgba(244,67,54,0.35);border-radius:10px;
+  padding:11px 18px;margin-bottom:14px;
+  display:flex;align-items:center;gap:14px;overflow:hidden;
+  position:relative;
 }
+.live-banner::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,rgba(244,67,54,0.05),transparent 40%,transparent 60%,rgba(244,67,54,0.05));
+  animation:bannerScan 3s linear infinite;
+}
+@keyframes bannerScan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.lb-label{
+  font-family:'Bebas Neue';font-size:14px;letter-spacing:3px;color:var(--live);
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
+}
+.lb-items{display:flex;gap:24px;overflow:hidden;flex:1;}
+.lb-item{font-family:'Rajdhani';font-weight:700;font-size:14px;white-space:nowrap;color:var(--text2);}
+.lb-score{color:var(--live2);font-family:'Bebas Neue';font-size:17px;letter-spacing:1px;}
 
-/* Center score */
-.mc-center {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; padding: 10px 4px; gap: 5px;
+/* ── GRUPPE HEADER ── */
+.gruppe-header{
+  display:flex;align-items:center;gap:18px;padding-bottom:18px;margin-bottom:18px;
+  border-bottom:1px solid var(--border3);
 }
-.mc-score-row {
-  display: flex; align-items: center; gap: 6px;
+.gr-letter{
+  font-family:'Bebas Neue';font-size:72px;line-height:1;
+  background:linear-gradient(160deg,var(--gold3),var(--copper));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  min-width:52px;filter:drop-shadow(0 0 20px rgba(245,200,66,0.2));
 }
-.mc-score-num {
-  font-family: 'Oswald'; font-weight: 700; font-size: 34px; line-height: 1;
-  min-width: 28px; text-align: center;
+.gr-pills{display:flex;gap:7px;flex-wrap:wrap;}
+.gr-pill{
+  display:flex;align-items:center;gap:6px;
+  background:var(--g3);border:1px solid var(--border2);
+  border-radius:6px;padding:5px 12px 5px 8px;
+  font-family:'Rajdhani';font-weight:700;font-size:12px;letter-spacing:.5px;
+  transition:all .15s;
 }
-.mc-score-sep {
-  font-family: 'Oswald'; font-weight: 300; font-size: 28px; color: var(--bg3);
-  line-height: 1;
-}
-.live-num { color: var(--live2); }
-.final-num { color: var(--text); }
-.upcoming-num { color: var(--muted); font-size: 18px; }
-
-.mc-vs {
-  font-family: 'Barlow Condensed'; font-weight: 900; font-size: 13px;
-  letter-spacing: 3px; color: var(--muted); text-transform: uppercase;
-}
-
-.status-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-family: 'Barlow Condensed'; font-weight: 800; font-size: 9px;
-  letter-spacing: 2px; text-transform: uppercase;
-  padding: 3px 9px; border-radius: 100px;
-}
-.chip-live {
-  background: rgba(255,48,48,0.2); border: 1px solid rgba(255,48,48,0.4); color: var(--live2);
-}
-.chip-final {
-  background: rgba(74,90,122,0.2); border: 1px solid rgba(74,90,122,0.3); color: var(--muted);
-}
-.chip-soon {
-  background: rgba(255,165,0,0.15); border: 1px solid rgba(255,165,0,0.3); color: var(--amber);
-}
-.chip-upcoming {
-  background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.2); color: var(--cyan);
-}
-.blink-dot {
-  width: 5px; height: 5px; border-radius: 50%; background: currentColor;
-  animation: blink 1s step-end infinite;
-}
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
-/* Kickoff time */
-.mc-kickoff {
-  font-family: 'Oswald'; font-weight: 600; font-size: 18px; color: var(--text2);
-  letter-spacing: 1px;
-}
-.mc-date-text {
-  font-family: 'Barlow Condensed'; font-size: 10px; font-weight: 700;
-  color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase;
+.gr-pill.my-team{
+  background:rgba(245,200,66,0.09);border-color:rgba(245,200,66,0.35);color:var(--gold);
+  box-shadow:0 0 10px rgba(245,200,66,0.06);
 }
 
-/* Action area */
-.mc-action { padding: 14px 18px; }
-.tipp-form-row { display: flex; align-items: center; gap: 5px; justify-content: flex-end; margin-top: 4px; }
+/* ── STATS ── */
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
+.stat-box{
+  background:var(--card);border:1px solid var(--border3);border-radius:12px;
+  padding:18px 14px;text-align:center;position:relative;overflow:hidden;
+}
+.stat-box::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.25;
+}
+.stat-num{
+  font-family:'Bebas Neue';font-size:52px;line-height:1;
+  background:linear-gradient(135deg,var(--gold3),var(--copper));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  letter-spacing:2px;
+}
+.stat-label{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:3px;}
 
-.score-in {
-  width: 40px; height: 36px; background: var(--bg3);
-  border: 1px solid rgba(255,255,255,0.1); color: #fff;
-  border-radius: 6px; text-align: center;
-  font-family: 'Oswald'; font-size: 20px; font-weight: 600;
-  -moz-appearance: textfield; appearance: none; transition: all 0.15s;
-}
-.score-in::-webkit-inner-spin-button, .score-in::-webkit-outer-spin-button { -webkit-appearance: none; }
-.score-in:focus {
-  outline: none; border-color: var(--gold); background: var(--bg2);
-  box-shadow: 0 0 0 3px rgba(255,215,0,0.1);
-}
-.score-in-sep { font-family: 'Oswald'; font-size: 18px; color: var(--muted); }
-
-.tipp-submit {
-  background: linear-gradient(135deg, var(--gold3), var(--amber));
-  color: #000; border: none; border-radius: 6px;
-  padding: 6px 12px; font-family: 'Barlow Condensed'; font-weight: 900;
-  font-size: 12px; letter-spacing: 1px; text-transform: uppercase;
-  cursor: pointer; transition: all 0.2s; white-space: nowrap;
-}
-.tipp-submit:hover { transform: scale(1.04); box-shadow: 0 4px 16px rgba(255,215,0,0.4); }
-
-.tipp-saved-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
-.tipp-saved-score {
-  font-family: 'Oswald'; font-weight: 700; font-size: 16px; color: var(--neon);
-  display: flex; align-items: center; gap: 6px;
-}
-.tipp-eval { font-family: 'Barlow Condensed'; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
-.eval-perfekt { color: var(--gold); }
-.eval-gut { color: var(--neon2); }
-.eval-tendenz { color: var(--cyan); }
-.eval-falsch { color: var(--fire1); }
-.eval-open { color: var(--muted); }
-
-.badge-locked {
-  font-family: 'Barlow Condensed'; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
-  color: var(--live); display: flex; align-items: center; gap: 5px;
-}
-.badge-missed { font-family: 'Barlow Condensed'; font-size: 12px; font-weight: 700; color: var(--muted); }
-.badge-soon-warn {
-  font-family: 'Barlow Condensed'; font-size: 11px; font-weight: 700;
-  color: var(--amber); letter-spacing: 0.5px;
+/* ── PROGRESS ── */
+.prog-track{height:5px;background:var(--g3);border-radius:3px;overflow:hidden;}
+.prog-fill{
+  height:100%;border-radius:3px;
+  background:linear-gradient(90deg,var(--neon2),var(--neon));
+  transition:width 1.2s cubic-bezier(.34,1.56,.64,1);
+  box-shadow:0 0 8px rgba(0,229,160,0.4);
 }
 
-/* ═══════════════════════════════════════
-   LIVE BANNER
-═══════════════════════════════════════ */
-.live-banner {
-  background: linear-gradient(90deg, rgba(255,48,48,0.12) 0%, rgba(255,48,48,0.04) 100%);
-  border: 1px solid rgba(255,48,48,0.3); border-radius: 10px;
-  padding: 12px 20px; margin-bottom: 16px;
-  display: flex; align-items: center; gap: 16px; overflow: hidden;
+/* ── PROFILE CARD ── */
+.profile-card{
+  background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:22px;text-align:center;
 }
-.live-banner-label {
-  font-family: 'Barlow Condensed'; font-weight: 900; font-size: 12px;
-  letter-spacing: 3px; text-transform: uppercase; color: var(--live);
-  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+.profile-head{
+  width:80px;height:80px;border-radius:10px;image-rendering:pixelated;
+  border:2px solid transparent;
+  background:linear-gradient(var(--card),var(--card)) padding-box,
+              linear-gradient(135deg,var(--gold3),var(--copper)) border-box;
 }
-.live-ticker-items {
-  display: flex; gap: 24px; overflow: hidden; flex: 1;
+.profile-name{font-family:'Bebas Neue';font-size:26px;letter-spacing:3px;margin-top:10px;}
+.profile-sub{font-family:'Rajdhani';font-weight:700;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--neon2);margin-top:2px;}
+.fav-row{
+  display:flex;align-items:center;gap:9px;
+  background:rgba(245,200,66,0.06);border:1px solid rgba(245,200,66,0.18);
+  border-radius:8px;padding:9px 13px;margin-top:14px;text-align:left;
 }
-.live-ticker-item {
-  font-family: 'Barlow Condensed'; font-weight: 700; font-size: 14px;
-  white-space: nowrap; color: var(--text2);
-}
-.live-ticker-score { color: var(--live2); font-weight: 900; font-size: 16px; font-family: 'Oswald'; }
+.fav-name{font-family:'Rajdhani';font-weight:800;font-size:15px;color:var(--gold);letter-spacing:.5px;}
+.fav-sub{font-size:11px;color:var(--muted);font-weight:600;}
 
-/* ═══════════════════════════════════════
-   GRUPPE HEADER
-═══════════════════════════════════════ */
-.gruppe-header {
-  display: flex; align-items: center; gap: 20px;
-  padding: 0 0 20px; margin-bottom: 20px;
-  border-bottom: 1px solid var(--border3);
+/* ── LEADERBOARD ── */
+.lb-search-wrap{position:relative;margin-bottom:14px;}
+.lb-search{
+  width:100%;padding:11px 16px 11px 44px;
+  background:var(--g3);border:1px solid var(--border2);
+  border-radius:10px;color:var(--text);font-family:'Exo 2';font-size:14px;font-weight:500;
+  outline:none;transition:all .2s;
 }
-.gruppe-letter {
-  font-family: 'Oswald'; font-weight: 700; font-size: 64px; line-height: 1;
-  background: linear-gradient(160deg, var(--gold3), var(--amber));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  min-width: 48px;
-}
-.gruppe-team-pills { display: flex; gap: 8px; flex-wrap: wrap; }
-.gruppe-pill {
-  display: flex; align-items: center; gap: 6px;
-  background: var(--bg3); border: 1px solid var(--border2);
-  border-radius: 6px; padding: 5px 12px 5px 8px;
-  font-family: 'Barlow Condensed'; font-weight: 700; font-size: 13px;
-  letter-spacing: 0.5px; transition: all 0.15s;
-}
-.gruppe-pill.my-team {
-  background: rgba(255,215,0,0.07); border-color: rgba(255,215,0,0.3); color: var(--gold);
-}
+.lb-search:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(245,200,66,0.08);}
+.lb-search::placeholder{color:var(--muted);}
+.lb-search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:17px;pointer-events:none;}
 
-/* ═══════════════════════════════════════
-   STATS CARDS
-═══════════════════════════════════════ */
-.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
-.stat-box {
-  background: var(--card); border: 1px solid var(--border3); border-radius: 12px;
-  padding: 20px 16px; text-align: center; position: relative; overflow: hidden;
+.lb-head-row{
+  display:grid;grid-template-columns:56px 1fr 80px 110px;
+  gap:12px;padding:6px 16px;
+  font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--muted);margin-bottom:8px;
 }
-.stat-box::after {
-  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--gold), transparent);
-  opacity: 0.3;
+.lb-row{
+  display:grid;grid-template-columns:56px 1fr 80px 110px;
+  align-items:center;gap:12px;
+  padding:12px 16px;border-radius:10px;border:1px solid transparent;
+  margin-bottom:6px;transition:all .2s;cursor:default;
 }
-.stat-num {
-  font-family: 'Oswald'; font-weight: 700; font-size: 48px; line-height: 1;
-  background: linear-gradient(135deg, var(--gold3), var(--amber));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-.stat-label {
-  font-family: 'Barlow Condensed'; font-weight: 700; font-size: 10px;
-  letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-top: 4px;
-}
+.lb-row:hover{background:rgba(255,255,255,0.025);border-color:var(--border2);}
+.lb-row.rk-1{background:linear-gradient(90deg,rgba(245,200,66,0.1),rgba(224,123,57,0.04));border-color:rgba(245,200,66,0.28);}
+.lb-row.rk-2{background:rgba(184,204,224,0.04);border-color:rgba(184,204,224,0.15);}
+.lb-row.rk-3{background:rgba(205,139,74,0.06);border-color:rgba(205,139,74,0.2);}
+.lb-row.rk-me{border-color:rgba(41,182,246,0.4);background:rgba(41,182,246,0.04);}
+.lb-row.lb-hidden{display:none;}
 
-/* ═══════════════════════════════════════
-   PROGRESS BAR
-═══════════════════════════════════════ */
-.prog-track {
-  height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden;
-}
-.prog-fill {
-  height: 100%; border-radius: 3px;
-  background: linear-gradient(90deg, var(--neon2), var(--neon));
-  transition: width 1s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 0 10px rgba(0,255,136,0.4);
-}
+.lb-rank{font-family:'Bebas Neue';font-size:30px;text-align:center;line-height:1;color:var(--muted);}
+.lb-rank.r1{color:var(--r1);filter:drop-shadow(0 0 8px rgba(245,200,66,0.5));}
+.lb-rank.r2{color:var(--r2);}
+.lb-rank.r3{color:var(--r3);}
 
-/* ═══════════════════════════════════════
-   PROFILE CARD
-═══════════════════════════════════════ */
-.profile-card {
-  background: var(--card); border: 1px solid var(--border2);
-  border-radius: 12px; padding: 24px; text-align: center;
+.lb-user-cell{display:flex;align-items:center;gap:11px;}
+.lb-av{width:32px;height:32px;border-radius:6px;image-rendering:pixelated;}
+.lb-username{font-family:'Rajdhani';font-weight:800;font-size:16px;letter-spacing:.5px;}
+.lb-team-sm{font-size:12px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:4px;}
+.lb-me-chip{
+  font-family:'Rajdhani';font-weight:800;font-size:9px;letter-spacing:2px;
+  background:rgba(41,182,246,0.15);color:var(--sky);border:1px solid rgba(41,182,246,0.3);
+  padding:2px 8px;border-radius:4px;text-transform:uppercase;
 }
-.profile-head {
-  width: 80px; height: 80px; border-radius: 10px;
-  image-rendering: pixelated;
-  border: 3px solid transparent;
-  background: linear-gradient(var(--card), var(--card)) padding-box,
-              linear-gradient(135deg, var(--gold3), var(--amber)) border-box;
-}
-.profile-name { font-family: 'Oswald'; font-weight: 700; font-size: 24px; letter-spacing: 2px; margin-top: 10px; }
-.profile-sub { font-family: 'Barlow Condensed'; font-weight: 600; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: var(--neon2); margin-top: 2px; }
-.fav-team-row {
-  display: flex; align-items: center; gap: 10px;
-  background: rgba(255,215,0,0.05); border: 1px solid rgba(255,215,0,0.15);
-  border-radius: 8px; padding: 10px 14px; margin-top: 14px; text-align: left;
-}
-.fav-team-name { font-family: 'Barlow Condensed'; font-weight: 800; font-size: 15px; color: var(--gold); letter-spacing: 0.5px; }
-.fav-team-sub { font-size: 11px; color: var(--muted); font-weight: 600; }
-
-/* ═══════════════════════════════════════
-   LEADERBOARD
-═══════════════════════════════════════ */
-.lb-search-wrap {
-  position: relative; margin-bottom: 16px;
-}
-.lb-search {
-  width: 100%; padding: 12px 16px 12px 44px;
-  background: var(--bg3); border: 1px solid var(--border2);
-  border-radius: 10px; color: var(--text); font-family: 'Barlow', sans-serif;
-  font-size: 15px; font-weight: 500; outline: none; transition: all 0.2s;
-}
-.lb-search:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,215,0,0.08); }
-.lb-search::placeholder { color: var(--muted); }
-.lb-search-icon {
-  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-  color: var(--muted); font-size: 18px; pointer-events: none;
-}
-
-.lb-header-row {
-  display: grid; grid-template-columns: 56px 1fr 80px 100px;
-  gap: 12px; padding: 8px 18px;
-  font-family: 'Barlow Condensed'; font-weight: 800; font-size: 10px;
-  letter-spacing: 2px; text-transform: uppercase; color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.lb-row {
-  display: grid; grid-template-columns: 56px 1fr 80px 100px;
-  align-items: center; gap: 12px;
-  padding: 13px 18px; border-radius: 10px;
-  border: 1px solid transparent; margin-bottom: 6px;
-  transition: all 0.2s; cursor: default;
-}
-.lb-row:hover { background: rgba(255,255,255,0.03); border-color: var(--border2); }
-.lb-row.rank-1 {
-  background: linear-gradient(90deg, rgba(255,215,0,0.1), rgba(255,165,0,0.04));
-  border-color: rgba(255,215,0,0.25);
-}
-.lb-row.rank-2 {
-  background: rgba(192,208,224,0.04); border-color: rgba(192,208,224,0.15);
-}
-.lb-row.rank-3 {
-  background: rgba(205,140,80,0.06); border-color: rgba(205,140,80,0.2);
-}
-.lb-row.rank-me {
-  border-color: rgba(0,212,255,0.35); background: rgba(0,212,255,0.04);
-}
-.lb-row.lb-hidden { display: none; }
-
-.lb-rank {
-  font-family: 'Oswald'; font-weight: 700; font-size: 28px; text-align: center;
-  line-height: 1; color: var(--muted);
-}
-.lb-rank.r1 { color: var(--r1); text-shadow: 0 0 16px rgba(255,215,0,0.5); }
-.lb-rank.r2 { color: var(--r2); }
-.lb-rank.r3 { color: var(--r3); }
-
-.lb-user-cell { display: flex; align-items: center; gap: 12px; }
-.lb-head { width: 32px; height: 32px; border-radius: 6px; image-rendering: pixelated; }
-.lb-name { font-family: 'Barlow Condensed'; font-weight: 800; font-size: 16px; letter-spacing: 0.5px; }
-.lb-team-small { font-size: 12px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 4px; }
-.lb-me-badge {
-  font-family: 'Barlow Condensed'; font-weight: 800; font-size: 9px;
-  letter-spacing: 2px; background: rgba(0,212,255,0.15); color: var(--cyan);
-  border: 1px solid rgba(0,212,255,0.3); padding: 2px 8px; border-radius: 4px;
-  text-transform: uppercase;
-}
-.lb-tipps-cell {
-  font-family: 'Barlow Condensed'; font-weight: 700; font-size: 15px;
-  color: var(--muted); text-align: center;
-}
-.lb-pts {
-  font-family: 'Oswald'; font-weight: 700; font-size: 24px; text-align: right;
-  background: linear-gradient(135deg, var(--gold3), var(--amber));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+.lb-tipps-cell{font-family:'Rajdhani';font-weight:700;font-size:14px;color:var(--muted);text-align:center;}
+.lb-pts{
+  font-family:'Bebas Neue';font-size:26px;text-align:right;letter-spacing:1px;
+  background:linear-gradient(135deg,var(--gold3),var(--copper));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
 }
 
 /* Podium */
-.podium-wrap {
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 36px;
+.podium-wrap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:32px;}
+.podium-card{border-radius:12px;padding:22px 14px;text-align:center;position:relative;overflow:hidden;border:1px solid;}
+.po-1{
+  background:linear-gradient(160deg,rgba(245,200,66,0.14),rgba(224,123,57,0.06));
+  border-color:rgba(245,200,66,0.38);order:1;
 }
-.podium-card {
-  border-radius: 12px; padding: 24px 16px; text-align: center;
-  position: relative; overflow: hidden; border: 1px solid;
+.po-1::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--gold3),transparent);
 }
-.podium-1 {
-  background: linear-gradient(160deg, rgba(255,215,0,0.12), rgba(255,165,0,0.06));
-  border-color: rgba(255,215,0,0.35); order: 1;
-}
-.podium-2 {
-  background: rgba(192,208,224,0.05); border-color: rgba(192,208,224,0.2);
-  order: 0; margin-top: 24px;
-}
-.podium-3 {
-  background: rgba(205,140,80,0.06); border-color: rgba(205,140,80,0.2);
-  order: 2; margin-top: 36px;
-}
-.podium-medal { font-size: 36px; margin-bottom: 10px; }
-.podium-head {
-  width: 56px; height: 56px; border-radius: 8px; image-rendering: pixelated;
-  border: 2px solid rgba(255,215,0,0.3); margin: 0 auto 10px;
-}
-.podium-name { font-family: 'Oswald'; font-weight: 700; font-size: 18px; letter-spacing: 1px; }
-.podium-pts {
-  font-family: 'Oswald'; font-weight: 700; font-size: 28px;
-  background: linear-gradient(135deg, var(--gold3), var(--amber));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  margin-top: 6px;
+.po-2{background:rgba(184,204,224,0.04);border-color:rgba(184,204,224,0.2);order:0;margin-top:24px;}
+.po-3{background:rgba(205,139,74,0.06);border-color:rgba(205,139,74,0.2);order:2;margin-top:38px;}
+.po-medal{font-size:38px;margin-bottom:10px;}
+.po-head{width:56px;height:56px;border-radius:8px;image-rendering:pixelated;border:2px solid rgba(245,200,66,0.3);margin:0 auto 10px;}
+.po-name{font-family:'Bebas Neue';font-size:20px;letter-spacing:2px;}
+.po-pts{
+  font-family:'Bebas Neue';font-size:30px;letter-spacing:1px;
+  background:linear-gradient(135deg,var(--gold3),var(--copper));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  margin-top:6px;
 }
 
-/* ═══════════════════════════════════════
-   PUNKTE SYSTEM PAGE
-═══════════════════════════════════════ */
-.pts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
-.pts-row {
-  display: flex; align-items: center; justify-content: space-between;
-  background: var(--bg3); border: 1px solid var(--border2);
-  border-radius: 8px; padding: 16px 20px; gap: 12px;
+/* ── PUNKTE PAGE ── */
+.pts-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;}
+.pts-row{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--g3);border:1px solid var(--border2);border-radius:8px;padding:15px 18px;gap:12px;
 }
-.pts-row.top { border-color: rgba(0,255,136,0.3); background: rgba(0,255,136,0.04); }
-.pts-label { font-weight: 600; font-size: 15px; }
-.pts-sub { font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 500; }
-.pts-val {
-  font-family: 'Oswald'; font-weight: 700; font-size: 26px;
-  background: linear-gradient(135deg, var(--gold3), var(--amber));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  white-space: nowrap;
+.pts-row.top{border-color:rgba(0,229,160,0.3);background:rgba(0,229,160,0.04);}
+.pts-label{font-weight:700;font-size:14px;}
+.pts-sub{font-size:12px;color:var(--muted);margin-top:2px;font-weight:500;}
+.pts-val{
+  font-family:'Bebas Neue';font-size:28px;letter-spacing:1px;
+  background:linear-gradient(135deg,var(--gold3),var(--copper));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;
 }
-.pts-val.neg { background: linear-gradient(135deg, var(--fire2), var(--fire1)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.pts-val.neg{background:linear-gradient(135deg,var(--fire2),var(--fire));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
 
-/* ═══════════════════════════════════════
-   REGISTER PAGE
-═══════════════════════════════════════ */
-.code-display {
-  font-family: 'Oswald'; font-weight: 700; font-size: 72px; letter-spacing: 20px;
-  color: var(--neon); text-align: center; padding: 28px 20px;
-  background: rgba(0,255,136,0.04); border: 2px solid rgba(0,255,136,0.25);
-  border-radius: 12px; margin: 24px 0;
-  text-shadow: 0 0 30px rgba(0,255,136,0.4);
-  animation: code-glow 2s ease-in-out infinite;
+/* ── REGISTER ── */
+.code-display{
+  font-family:'Bebas Neue';font-size:80px;letter-spacing:24px;
+  color:var(--neon);text-align:center;padding:26px 20px;
+  background:rgba(0,229,160,0.05);border:2px solid rgba(0,229,160,0.28);border-radius:12px;
+  margin:22px 0;animation:codeGlow 2s ease-in-out infinite;
 }
-@keyframes code-glow {
-  0%,100% { text-shadow: 0 0 20px rgba(0,255,136,0.4); }
-  50% { text-shadow: 0 0 40px rgba(0,255,136,0.8); }
+@keyframes codeGlow{
+  0%,100%{text-shadow:0 0 20px rgba(0,229,160,0.4)}
+  50%{text-shadow:0 0 50px rgba(0,229,160,0.9),0 0 80px rgba(0,229,160,0.3)}
 }
-.step-card {
-  background: var(--bg3); border: 1px solid var(--border2); border-radius: 10px;
-  padding: 20px; line-height: 2.4; font-size: 14px;
-}
-.step-card code {
-  background: rgba(0,212,255,0.1); color: var(--cyan);
-  border: 1px solid rgba(0,212,255,0.2);
-  border-radius: 5px; padding: 2px 10px; font-size: 13px; font-family: 'Courier New', monospace;
-}
+.step-card{background:var(--g3);border:1px solid var(--border2);border-radius:10px;padding:18px;line-height:2.4;font-size:14px;}
+.step-card code{background:rgba(41,182,246,0.12);color:var(--sky);border:1px solid rgba(41,182,246,0.25);border-radius:5px;padding:2px 10px;font-size:12px;font-family:'Courier New',monospace;}
+.spinner{width:36px;height:36px;margin:14px auto;border:3px solid rgba(255,255,255,0.07);border-top-color:var(--neon);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.alert{padding:13px 18px;border-radius:8px;margin-bottom:12px;font-size:14px;font-weight:600;}
+.alert-neon{background:rgba(0,229,160,0.07);border:1px solid rgba(0,229,160,0.28);color:var(--neon);}
+.alert-gold{background:rgba(245,200,66,0.07);border:1px solid rgba(245,200,66,0.22);color:var(--gold);text-align:center;}
+.prog-anim{height:3px;background:var(--g3);border-radius:2px;margin-top:14px;overflow:hidden;}
+.prog-anim-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--neon2),var(--neon));animation:prog 60s linear forwards;border-radius:2px;}
+@keyframes prog{to{width:100%}}
 
-/* Spinner */
-.spinner {
-  width: 36px; height: 36px; margin: 16px auto;
-  border: 3px solid rgba(255,255,255,0.08); border-top-color: var(--neon);
-  border-radius: 50%; animation: spin 0.8s linear infinite;
+/* ── TEAM CHOOSER ── */
+.team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:10px;}
+.team-btn{
+  position:relative;overflow:hidden;
+  background:linear-gradient(160deg,var(--c1),var(--c2));
+  border:1px solid rgba(255,255,255,0.09);border-radius:11px;
+  padding:0;cursor:pointer;min-height:128px;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  font-family:inherit;transition:transform .2s ease,box-shadow .2s ease;
+  box-shadow:0 4px 20px rgba(0,0,0,0.55);
 }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Alerts */
-.alert { padding: 14px 20px; border-radius: 8px; margin-bottom: 14px; font-size: 14px; font-weight: 600; }
-.alert-neon { background: rgba(0,255,136,0.07); border: 1px solid rgba(0,255,136,0.25); color: var(--neon); }
-.alert-gold { background: rgba(255,215,0,0.07); border: 1px solid rgba(255,215,0,0.2); color: var(--gold); text-align: center; }
-
-.prog-anim { height: 3px; background: var(--bg3); border-radius: 2px; margin-top: 16px; overflow: hidden; }
-.prog-anim-fill {
-  height: 100%; width: 0%;
-  background: linear-gradient(90deg, var(--neon2), var(--neon));
-  animation: prog 60s linear forwards; border-radius: 2px;
+.team-btn:hover{
+  transform:translateY(-6px) scale(1.04);
+  box-shadow:0 14px 36px rgba(0,0,0,0.75),0 0 0 2px rgba(245,200,66,0.55);
 }
-@keyframes prog { to { width: 100%; } }
+.team-btn-overlay{position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,rgba(0,0,0,0.7) 100%);z-index:1;}
+.team-btn-flag{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:66px;height:44px;object-fit:cover;border-radius:4px;box-shadow:0 3px 14px rgba(0,0,0,0.6);z-index:2;}
+.team-btn-name{position:relative;z-index:3;color:#fff;font-family:'Rajdhani';font-weight:800;font-size:13px;letter-spacing:.5px;text-transform:uppercase;text-shadow:0 1px 8px rgba(0,0,0,0.9);padding:0 10px;text-align:center;line-height:1.2;margin-top:68px;}
+.team-btn-group{position:relative;z-index:3;color:rgba(255,255,255,0.5);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding-bottom:10px;margin-top:2px;}
 
-/* ═══════════════════════════════════════
-   CHOOSE TEAM PAGE
-═══════════════════════════════════════ */
-.team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px,1fr)); gap: 10px; }
-.team-btn {
-  position: relative; overflow: hidden;
-  background: linear-gradient(160deg, var(--c1), var(--c2));
-  border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
-  padding: 0; cursor: pointer; min-height: 126px;
-  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
-  font-family: inherit; transition: transform 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-}
-.team-btn:hover {
-  transform: translateY(-5px) scale(1.03);
-  box-shadow: 0 12px 32px rgba(0,0,0,0.7), 0 0 0 2px rgba(255,215,0,0.5);
-}
-.team-btn-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 35%, rgba(0,0,0,0.65) 100%); z-index: 1; }
-.team-btn-flag {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  width: 66px; height: 44px; object-fit: cover; border-radius: 4px;
-  box-shadow: 0 3px 14px rgba(0,0,0,0.6); z-index: 2;
-}
-.team-btn-name {
-  position: relative; z-index: 3; color: #fff;
-  font-family: 'Barlow Condensed'; font-weight: 900; font-size: 14px;
-  letter-spacing: 0.5px; text-transform: uppercase;
-  text-shadow: 0 1px 8px rgba(0,0,0,0.9); padding: 0 10px; text-align: center;
-  line-height: 1.2; margin-top: 68px;
-}
-.team-btn-group {
-  position: relative; z-index: 3; color: rgba(255,255,255,0.6);
-  font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
-  padding-bottom: 10px; margin-top: 3px;
-}
+/* ── ENTER ANIMATIONS ── */
+.fade-in{opacity:0;transform:translateY(16px);animation:fadeIn .45s ease forwards;}
+.d1{animation-delay:.05s}.d2{animation-delay:.1s}.d3{animation-delay:.15s}
+.d4{animation-delay:.2s}.d5{animation-delay:.25s}.d6{animation-delay:.3s}
+@keyframes fadeIn{to{opacity:1;transform:translateY(0)}}
 
-/* ═══════════════════════════════════════
-   SCROLL ANIMATIONS
-═══════════════════════════════════════ */
-.fade-up {
-  opacity: 0; transform: translateY(20px);
-  animation: fadeUp 0.5s ease forwards;
-}
-@keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:6px;}
+::-webkit-scrollbar-track{background:var(--g1);}
+::-webkit-scrollbar-thumb{background:rgba(245,200,66,0.2);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:rgba(245,200,66,0.4);}
 
-.stagger-1 { animation-delay: 0.05s; }
-.stagger-2 { animation-delay: 0.10s; }
-.stagger-3 { animation-delay: 0.15s; }
-.stagger-4 { animation-delay: 0.20s; }
-.stagger-5 { animation-delay: 0.25s; }
-.stagger-6 { animation-delay: 0.30s; }
+/* ── DIVIDER ── */
+.divider{height:1px;background:var(--border2);margin:22px 0;}
 
-/* ═══════════════════════════════════════
-   MISC
-═══════════════════════════════════════ */
-.divider { height: 1px; background: var(--border2); margin: 24px 0; }
-.mc-head-avatar { width: 80px; height: 80px; border-radius: 10px; image-rendering: pixelated; }
-.text-gold { color: var(--gold); }
-.text-neon { color: var(--neon); }
-.text-muted { color: var(--muted); }
-.fw900 { font-weight: 900; }
-.font-cond { font-family: 'Barlow Condensed'; }
-.font-oswald { font-family: 'Oswald'; }
-
-/* SCROLLBAR */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: rgba(255,215,0,0.2); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,215,0,0.4); }
-
-/* RESPONSIVE */
+/* ── RESPONSIVE ── */
 @media(max-width:1000px){
-  .match-card { grid-template-columns: 1fr 130px 1fr; }
-  .match-card .mc-action { display: none; }
+  .match-card{grid-template-columns:1fr 150px 1fr;}
+  .match-card .mc-action{display:none;}
 }
 @media(max-width:700px){
-  .navbar { padding: 0 16px; }
-  .nav-links { display: none; }
-  .stats-grid { grid-template-columns: 1fr 1fr 1fr; }
-  .match-card { grid-template-columns: 1fr 100px 1fr; }
-  .mc-team-name { font-size: 13px; }
-  .mc-score-num { font-size: 26px; }
-  .pts-grid { grid-template-columns: 1fr; }
-  .podium-wrap { gap: 8px; }
-  .podium-2, .podium-3 { margin-top: 0; }
-  .lb-row { grid-template-columns: 44px 1fr 90px; }
-  .lb-tipps-cell { display: none; }
+  .navbar{padding:0 14px;}
+  .nb-links{display:none;}
+  .stats-grid{grid-template-columns:repeat(3,1fr);}
+  .match-card{grid-template-columns:1fr 110px 1fr;}
+  .mc-team-name{font-size:13px;}
+  .mc-num{font-size:28px;}
+  .pts-grid{grid-template-columns:1fr;}
+  .podium-wrap{gap:7px;}
+  .po-2,.po-3{margin-top:0;}
+  .lb-row{grid-template-columns:44px 1fr 100px;}
+  .lb-tipps-cell{display:none;}
 }
 </style>
 """
@@ -1391,7 +1222,7 @@ BASE_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>WM 2026 – GrieferGames Tipp-Portal</title>
+<title>WM 2026 — GrieferGames Tipp-Portal</title>
 """ + BASE_CSS + """
 </head>
 <body>
@@ -1411,21 +1242,21 @@ def get_navbar(username, points, lieblingsteam, active_page="dashboard"):
     links = ""
     for pid, url, label in pages:
         ac = "active" if active_page == pid else ""
-        links += f'<a href="{url}" class="nav-link {ac}">{label}</a>'
+        links += f'<a href="{url}" class="nb-link {ac}">{label}</a>'
     return f"""
     <nav class="navbar">
-      <div class="nav-logo-wrap">
-        <span class="nav-ball">⚽</span>
-        <span class="nav-logo">WM 2026</span>
+      <div class="nb-logo-wrap">
+        <div class="nb-icon">⚽</div>
+        <span class="nb-title">WM 2026</span>
       </div>
-      <div class="nav-sep"></div>
-      <div class="nav-links">{links}</div>
-      <div class="nav-right">
+      <div class="nb-sep"></div>
+      <div class="nb-links">{links}</div>
+      <div class="nb-right">
         {team_flag}
-        <img class="nav-head" src="https://mc-heads.net/avatar/{username}/32" alt="" onerror="this.style.display='none'">
-        <span class="nav-user">{username}</span>
-        <div class="nav-coins"><div class="coin-icon">◈</div>{points:,}</div>
-        <a href="/logout" class="nav-logout">Abmelden</a>
+        <img class="nb-avatar" src="https://mc-heads.net/avatar/{username}/32" alt="" onerror="this.style.display='none'">
+        <span class="nb-user">{username}</span>
+        <div class="nb-coins"><div class="coin-dot">◈</div>{points:,}</div>
+        <a href="/logout" class="nb-logout">Abmelden</a>
       </div>
     </nav>
     """
@@ -1434,58 +1265,63 @@ def get_navbar(username, points, lieblingsteam, active_page="dashboard"):
 # HOME
 # ==========================================
 HOME_HTML = BASE_HTML + """
-<canvas class="particle-canvas" id="particles"></canvas>
+<canvas id="pcanvas" style="position:fixed;inset:0;z-index:0;pointer-events:none;"></canvas>
+
 <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;position:relative;z-index:1;">
   <div class="hero">
-    <div class="hero-pitch-lines"></div>
-    <div class="hero-eyebrow fade-up">⚽ GrieferGames × FIFA World Cup 2026</div>
+    <div class="hero-field"></div>
+    <div class="hero-chip fade-in">⚡ GrieferGames × FIFA World Cup 2026</div>
     <div style="position:relative;display:inline-block;">
-      <div class="hero-title fade-up stagger-1">WM 2026<br>TIPP<br>PORTAL</div>
+      <div class="hero-h1 fade-in d1">
+        <span class="hero-h1-inner">WM 2026<br>TIPP<br>PORTAL</span>
+      </div>
     </div>
-    <p class="hero-sub fade-up stagger-2">Tippe alle 72 Gruppenspiele der Weltmeisterschaft und beweise, dass du der beste Fußball-Prophet auf GrieferGames bist.</p>
-    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;" class="fade-up stagger-3">
-      <a href="/register" class="btn btn-fire">⚡ Jetzt mitmachen</a>
-      <a href="#features" class="btn btn-neon">Mehr erfahren</a>
+    <p class="hero-sub fade-in d2">Tippe alle 72 Gruppenspiele der Weltmeisterschaft und beweise, dass du der beste Fußball-Prophet auf GrieferGames bist.</p>
+    <div class="hero-ctas fade-in d3">
+      <a href="/register" class="btn btn-primary">⚡ Jetzt mitmachen</a>
+      <a href="#features" class="btn btn-outline">↓ Mehr erfahren</a>
     </div>
   </div>
 
-  <div id="features" class="wrap" style="padding-bottom:100px;max-width:900px;">
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:center;">
-      <div class="card fade-up stagger-1" style="border-color:rgba(0,255,136,0.12);">
-        <div style="font-size:40px;margin-bottom:12px;">🌍</div>
-        <div style="font-family:'Oswald';font-size:28px;font-weight:700;color:var(--gold);letter-spacing:1px;">48 TEAMS</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:4px;font-family:'Barlow Condensed';font-weight:700;letter-spacing:1px;">12 GRUPPEN</div>
+  <div id="features" class="wrap" style="padding-bottom:100px;max-width:960px;">
+    <!-- Stat Highlights -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;">
+      <div class="card fade-in d1" style="border-color:rgba(0,229,160,0.14);text-align:center;padding:32px 16px;">
+        <div style="font-size:44px;margin-bottom:10px;">🌍</div>
+        <div style="font-family:'Bebas Neue';font-size:52px;line-height:1;background:linear-gradient(135deg,var(--gold3),var(--copper));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px;">48</div>
+        <div style="font-family:'Rajdhani';font-weight:700;font-size:11px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-top:4px;">Teams · 12 Gruppen</div>
       </div>
-      <div class="card fade-up stagger-2" style="border-color:rgba(255,165,0,0.12);">
-        <div style="font-size:40px;margin-bottom:12px;">⚽</div>
-        <div style="font-family:'Oswald';font-size:28px;font-weight:700;color:var(--gold);letter-spacing:1px;">72 SPIELE</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:4px;font-family:'Barlow Condensed';font-weight:700;letter-spacing:1px;">GRUPPENPHASE</div>
+      <div class="card fade-in d2" style="border-color:rgba(245,200,66,0.14);text-align:center;padding:32px 16px;">
+        <div style="font-size:44px;margin-bottom:10px;">⚽</div>
+        <div style="font-family:'Bebas Neue';font-size:52px;line-height:1;background:linear-gradient(135deg,var(--gold3),var(--copper));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px;">72</div>
+        <div style="font-family:'Rajdhani';font-weight:700;font-size:11px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-top:4px;">Spiele Gruppenphase</div>
       </div>
-      <div class="card fade-up stagger-3" style="border-color:rgba(255,69,0,0.12);">
-        <div style="font-size:40px;margin-bottom:12px;">🏆</div>
-        <div style="font-family:'Oswald';font-size:28px;font-weight:700;color:var(--gold);letter-spacing:1px;">BIS 1.000</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:4px;font-family:'Barlow Condensed';font-weight:700;letter-spacing:1px;">PUNKTE PRO TIPP</div>
+      <div class="card fade-in d3" style="border-color:rgba(255,87,34,0.14);text-align:center;padding:32px 16px;">
+        <div style="font-size:44px;margin-bottom:10px;">🏆</div>
+        <div style="font-family:'Bebas Neue';font-size:52px;line-height:1;background:linear-gradient(135deg,var(--gold3),var(--copper));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px;">1K</div>
+        <div style="font-family:'Rajdhani';font-weight:700;font-size:11px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-top:4px;">Punkte pro Tipp Max</div>
       </div>
     </div>
 
-    <!-- Punkte-Vorschau -->
-    <div class="card fade-up stagger-4" style="margin-top:24px;border-color:rgba(255,215,0,0.12);">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center;">
+    <!-- Punkte Vorschau -->
+    <div class="card fade-in d4" style="border-color:rgba(245,200,66,0.14);padding:28px 32px;">
+      <div style="font-family:'Bebas Neue';font-size:18px;letter-spacing:4px;color:var(--muted);margin-bottom:20px;text-align:center;">PUNKTESYSTEM ÜBERSICHT</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center;">
         <div>
-          <div style="font-family:'Oswald';font-size:32px;font-weight:700;color:var(--neon);">1.000</div>
-          <div style="font-size:11px;color:var(--muted);font-family:'Barlow Condensed';font-weight:700;letter-spacing:1px;margin-top:3px;">🎯 PERFEKT</div>
+          <div style="font-family:'Bebas Neue';font-size:48px;line-height:1;color:var(--neon);letter-spacing:2px;text-shadow:0 0 20px rgba(0,229,160,0.4);">1.000</div>
+          <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:5px;">🎯 Perfekt</div>
         </div>
         <div>
-          <div style="font-family:'Oswald';font-size:32px;font-weight:700;color:var(--gold);">500</div>
-          <div style="font-size:11px;color:var(--muted);font-family:'Barlow Condensed';font-weight:700;letter-spacing:1px;margin-top:3px;">⚡ TORDIFFERENZ</div>
+          <div style="font-family:'Bebas Neue';font-size:48px;line-height:1;color:var(--gold);letter-spacing:2px;">500</div>
+          <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:5px;">⚡ Tordifferenz</div>
         </div>
         <div>
-          <div style="font-family:'Oswald';font-size:32px;font-weight:700;color:var(--cyan);">200</div>
-          <div style="font-size:11px;color:var(--muted);font-family:'Barlow Condensed';font-weight:700;letter-spacing:1px;margin-top:3px;">✅ TENDENZ</div>
+          <div style="font-family:'Bebas Neue';font-size:48px;line-height:1;color:var(--sky);letter-spacing:2px;">200</div>
+          <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:5px;">✅ Tendenz</div>
         </div>
         <div>
-          <div style="font-family:'Oswald';font-size:32px;font-weight:700;color:var(--fire1);">–50</div>
-          <div style="font-size:11px;color:var(--muted);font-family:'Barlow Condensed';font-weight:700;letter-spacing:1px;margin-top:3px;">💸 EINSATZ</div>
+          <div style="font-family:'Bebas Neue';font-size:48px;line-height:1;color:var(--fire);letter-spacing:2px;">-50</div>
+          <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:5px;">💸 Einsatz</div>
         </div>
       </div>
     </div>
@@ -1493,46 +1329,31 @@ HOME_HTML = BASE_HTML + """
 </div>
 
 <script>
-// Particle System – floating footballs & confetti
-const canvas = document.getElementById('particles');
-const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+const cv = document.getElementById('pcanvas');
+const cx = cv.getContext('2d');
+cv.width = window.innerWidth; cv.height = window.innerHeight;
+window.addEventListener('resize',()=>{cv.width=window.innerWidth;cv.height=window.innerHeight;});
 
-const particles = [];
-const EMOJIS = ['⚽','🏆','⭐','🔥'];
+const EMOJIS=['⚽','🏆','⭐','🔥','🌍'];
+const pts=Array.from({length:22},()=>({
+  x:Math.random()*cv.width, y:Math.random()*cv.height,
+  vx:(Math.random()-.5)*.35, vy:-(0.18+Math.random()*.5),
+  size:12+Math.random()*20, op:0.03+Math.random()*.06,
+  e:EMOJIS[Math.floor(Math.random()*EMOJIS.length)],
+  r:Math.random()*Math.PI*2, rs:(Math.random()-.5)*.012
+}));
 
-for (let i = 0; i < 18; i++) {
-  particles.push({
-    x: Math.random() * canvas.width,
-    y: Math.random() * canvas.height,
-    vy: -(0.2 + Math.random() * 0.5),
-    vx: (Math.random() - 0.5) * 0.3,
-    size: 14 + Math.random() * 18,
-    opacity: 0.04 + Math.random() * 0.07,
-    emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
-    rot: Math.random() * Math.PI * 2,
-    rotSpeed: (Math.random() - 0.5) * 0.015
+(function anim(){
+  cx.clearRect(0,0,cv.width,cv.height);
+  pts.forEach(p=>{
+    p.y+=p.vy; p.x+=p.vx; p.r+=p.rs;
+    if(p.y<-50){p.y=cv.height+50;p.x=Math.random()*cv.width;}
+    cx.save();cx.globalAlpha=p.op;cx.font=p.size+'px serif';
+    cx.translate(p.x,p.y);cx.rotate(p.r);
+    cx.fillText(p.e,-p.size/2,p.size/2);cx.restore();
   });
-}
-
-function animParticles() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (const p of particles) {
-    p.y += p.vy; p.x += p.vx; p.rot += p.rotSpeed;
-    if (p.y < -40) { p.y = canvas.height + 40; p.x = Math.random() * canvas.width; }
-    ctx.save();
-    ctx.globalAlpha = p.opacity;
-    ctx.font = p.size + 'px serif';
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.rot);
-    ctx.fillText(p.emoji, -p.size/2, p.size/2);
-    ctx.restore();
-  }
-  requestAnimationFrame(animParticles);
-}
-animParticles();
+  requestAnimationFrame(anim);
+})();
 </script>
 </body></html>
 """
@@ -1553,21 +1374,19 @@ def register():
     return BASE_HTML + f"""
     <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;position:relative;z-index:1;">
       <div style="width:100%;max-width:520px;">
-        <div class="card fade-up" style="border-color:rgba(0,255,136,0.15);">
-          <div style="text-align:center;margin-bottom:24px;">
-            <div style="font-size:48px;margin-bottom:12px;">🔐</div>
-            <div class="hero-eyebrow" style="display:inline-flex;margin-bottom:14px;font-family:'Barlow Condensed';">Minecraft Verifizierung</div>
-            <h2 style="font-family:'Oswald';font-size:36px;font-weight:700;letter-spacing:2px;">DEIN CODE</h2>
+        <div class="card fade-in" style="border-color:rgba(0,229,160,0.18);">
+          <div style="text-align:center;margin-bottom:22px;">
+            <div style="font-size:52px;margin-bottom:12px;">🔐</div>
+            <div class="hero-chip" style="display:inline-flex;margin-bottom:14px;">Minecraft Verifizierung</div>
+            <h2 style="font-family:'Bebas Neue';font-size:40px;letter-spacing:4px;">DEIN CODE</h2>
           </div>
           <div class="code-display">{code}</div>
-          <div class="step-card" style="margin-bottom:20px;">
-            <div style="font-family:'Barlow Condensed';font-weight:900;font-size:14px;letter-spacing:2px;color:var(--amber);margin-bottom:12px;text-transform:uppercase;">📋 So geht's:</div>
+          <div class="step-card" style="margin-bottom:18px;">
+            <div style="font-family:'Rajdhani';font-weight:800;font-size:13px;letter-spacing:2px;color:var(--copper);margin-bottom:12px;text-transform:uppercase;">📋 So geht's:</div>
             <div>1. Logge dich auf <strong style="color:var(--text);">GrieferGames</strong> ein</div>
             <div>2. Schreibe diese Nachricht im Chat:</div>
-            <div style="margin:10px 0 0 14px;">
-              <code>/msg Lattenrost1234 #verifyWM {code}</code>
-            </div>
-            <div style="margin-top:14px;color:var(--muted);font-size:13px;font-family:'Barlow Condensed';font-weight:600;">
+            <div style="margin:10px 0 0 14px;"><code>/msg Lattenrost1234 #verifyWM {code}</code></div>
+            <div style="margin-top:14px;color:var(--muted);font-size:12px;font-family:'Rajdhani';font-weight:600;">
               ⚡ Lass dieses Fenster offen – das System erkennt die Nachricht automatisch.
             </div>
           </div>
@@ -1580,11 +1399,11 @@ def register():
       </div>
     </div>
     <script>
-      const iv = setInterval(() => {{
+      const iv=setInterval(()=>{{
         fetch('/api/check_status/{code}').then(r=>r.json()).then(d=>{{
           if(d.status==='verified'){{
             clearInterval(iv);
-            const el = document.getElementById('status');
+            const el=document.getElementById('status');
             el.innerHTML='✅ Verifiziert! Weiterleitung...';
             el.className='alert alert-neon';
             setTimeout(()=>window.location.href='/login_success/{code}',900);
@@ -1689,16 +1508,13 @@ def choose_team():
               <div class="team-btn-overlay"></div>
               <img class="team-btn-flag" src="{flag_src}" alt="{team['name']}" onerror="this.style.opacity='0'">
               <span class="team-btn-name">{team['name']}</span>
-              <span class="team-btn-group">GR. {gruppe_key}</span>
+              <span class="team-btn-group">Gr. {gruppe_key}</span>
             </button>"""
-
         groups_html += f"""
-        <div style="margin-bottom:32px;" class="fade-up">
-          <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;">
-            <span style="font-family:'Oswald';font-weight:700;font-size:40px;line-height:1;
-                  background:linear-gradient(135deg,var(--gold3),var(--amber));
-                  -webkit-background-clip:text;-webkit-text-fill-color:transparent;">{gruppe_key}</span>
-            <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(255,215,0,0.3),transparent);"></div>
+        <div style="margin-bottom:30px;" class="fade-in">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
+            <span style="font-family:'Bebas Neue';font-size:44px;line-height:1;background:linear-gradient(135deg,var(--gold3),var(--copper));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">{gruppe_key}</span>
+            <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(245,200,66,0.3),transparent);"></div>
           </div>
           <div class="team-grid">{teams_html}</div>
         </div>"""
@@ -1706,15 +1522,15 @@ def choose_team():
     return BASE_HTML + f"""
     <div class="page">
       <div class="wrap">
-        <div style="text-align:center;margin-bottom:56px;" class="fade-up">
-          <div class="hero-eyebrow" style="display:inline-flex;margin-bottom:16px;">🌍 Teamauswahl</div>
-          <h1 style="font-family:'Oswald';font-weight:700;font-size:clamp(48px,8vw,90px);line-height:0.9;
-               background:linear-gradient(160deg,#fff,var(--gold3),var(--amber));
-               -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:20px;letter-spacing:-1px;">
+        <div style="text-align:center;margin-bottom:52px;" class="fade-in">
+          <div class="hero-chip" style="display:inline-flex;margin-bottom:16px;">🌍 Teamauswahl</div>
+          <h1 style="font-family:'Bebas Neue';font-size:clamp(48px,8vw,96px);line-height:.88;
+               background:linear-gradient(160deg,#fff,var(--gold3),var(--copper));
+               -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:18px;letter-spacing:2px;">
             WEM DRÜCKST DU<br>DIE DAUMEN?
           </h1>
-          <p style="color:var(--text2);font-size:16px;max-width:400px;margin:0 auto;">
-            Wähle dein Lieblingsteam für die WM 2026. Du kannst es später jederzeit ändern.
+          <p style="color:var(--text2);font-size:15px;max-width:400px;margin:0 auto;">
+            Wähle dein Lieblingsteam — du kannst es danach jederzeit ändern.
           </p>
         </div>
         <form method="POST">{groups_html}</form>
@@ -1740,14 +1556,14 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
     tabs_html = ""
     for g in WM_GRUPPEN.keys():
         ac = "active" if g == gruppe_id else ""
-        tabs_html += f'<a href="/gruppe/{g}" class="tab {ac}">GR.&nbsp;{g}</a>'
+        tabs_html += f'<a href="/gruppe/{g}" class="tab {ac}">Gr.&nbsp;{g}</a>'
 
     # Team Pills
     team_pills = ""
     for t in gruppe_data["teams"]:
         is_mine = (t["name"] == lieblingsteam)
         mine_cls = "my-team" if is_mine else ""
-        team_pills += f'<span class="gruppe-pill {mine_cls}">{flag_img(t["code"],18)} {t["name"]}</span>'
+        team_pills += f'<span class="gr-pill {mine_cls}">{flag_img(t["code"],18)} {t["name"]}</span>'
 
     # Live Banner
     laufende = []
@@ -1760,11 +1576,11 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
 
     live_banner = ""
     if laufende:
-        items = "".join(f'<span class="live-ticker-item">{h} <span class="live-ticker-score">{s}</span> {g}</span>' for h,s,g in laufende)
+        items = "".join(f'<span class="lb-item">{h} <span class="lb-score">{s}</span> {g}</span>' for h,s,g in laufende)
         live_banner = f"""
-        <div class="live-banner fade-up">
-          <div class="live-banner-label"><div class="blink-dot"></div> 🔴 LIVE JETZT</div>
-          <div class="live-ticker-items">{items}</div>
+        <div class="live-banner fade-in">
+          <div class="lb-label"><div class="dot-blink"></div> 🔴 LIVE JETZT</div>
+          <div class="lb-items">{items}</div>
         </div>"""
 
     # Match Cards
@@ -1780,40 +1596,39 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         heim_code = TEAM_CODE.get(spiel["heim"], "")
         gast_code = TEAM_CODE.get(spiel["gast"], "")
 
-        # Card classes
         card_extra = ""
         if status == "live": card_extra = "is-live"
         elif status == "final": card_extra = "is-final"
         elif tipp: card_extra = "is-tipped"
 
-        stripe_cls = f"mc-stripe-{status}" if status in ("live","final","upcoming","soon") else ("mc-stripe-tipped" if tipp else "mc-stripe-upcoming")
+        acc_cls = f"acc-{status}" if status in ("live","final","upcoming","soon") else ("acc-tipped" if tipp else "acc-upcoming")
 
         # Center block
         if status in ("live","final") and live_score and live_score.get("heim") is not None:
-            num_cls = "live-num" if status == "live" else "final-num"
-            chip = f'<div class="status-chip chip-live"><div class="blink-dot"></div> LIVE</div>' if status=="live" else f'<div class="status-chip chip-final">ABPFIFF</div>'
+            num_cls = "num-live" if status == "live" else "num-final"
+            chip = f'<div class="status-badge sb-live"><div class="dot-blink"></div> LIVE</div>' if status=="live" else f'<div class="status-badge sb-final">ABPFIFF</div>'
             center_html = f"""
-            <div class="mc-center">
+            <div class="mc-mid">
               {chip}
               <div class="mc-score-row">
-                <span class="mc-score-num {num_cls}">{live_score["heim"]}</span>
-                <span class="mc-score-sep">:</span>
-                <span class="mc-score-num {num_cls}">{live_score["gast"]}</span>
+                <span class="mc-num {num_cls}">{live_score["heim"]}</span>
+                <span class="mc-colon">:</span>
+                <span class="mc-num {num_cls}">{live_score["gast"]}</span>
               </div>
             </div>"""
         elif status in ("live","final"):
-            chip = f'<div class="status-chip chip-live"><div class="blink-dot"></div> LIVE</div>' if status=="live" else f'<div class="status-chip chip-final">ABPFIFF</div>'
-            center_html = f'<div class="mc-center">{chip}<div class="mc-vs">?:?</div></div>'
+            chip = f'<div class="status-badge sb-live"><div class="dot-blink"></div> LIVE</div>' if status=="live" else f'<div class="status-badge sb-final">ABPFIFF</div>'
+            center_html = f'<div class="mc-mid">{chip}<div class="mc-vs">?:?</div></div>'
         elif status == "soon":
-            center_html = f"""<div class="mc-center">
-              <div class="status-chip chip-soon">⚡ BALD</div>
-              <div class="mc-kickoff">{spiel['uhrzeit']}</div>
-              <div class="mc-date-text">{spiel['datum']}</div>
+            center_html = f"""<div class="mc-mid">
+              <div class="status-badge sb-soon">⚡ BALD</div>
+              <div class="mc-time">{spiel['uhrzeit']}</div>
+              <div class="mc-date">{spiel['datum']}</div>
             </div>"""
         else:
-            center_html = f"""<div class="mc-center">
-              <div class="mc-kickoff">{spiel['uhrzeit']}</div>
-              <div class="mc-date-text">{spiel['datum']}</div>
+            center_html = f"""<div class="mc-mid">
+              <div class="mc-time">{spiel['uhrzeit']}</div>
+              <div class="mc-date">{spiel['datum']}</div>
               <div class="mc-vs">VS</div>
             </div>"""
 
@@ -1824,19 +1639,19 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
             eval_html = ""
             if status == "final" and live_score and live_score.get("heim") is not None:
                 if punkte_key == "perfekt":
-                    eval_html = '<span class="tipp-eval eval-perfekt">🎯 Perfekt! +1000 ◈</span>'
+                    eval_html = '<span class="eval-label ev-perfekt">🎯 Perfekt! +1000 ◈</span>'
                 elif punkte_key == "tendenz_tor":
-                    eval_html = '<span class="tipp-eval eval-gut">⚡ Tordiff! +500 ◈</span>'
+                    eval_html = '<span class="eval-label ev-gut">⚡ Tordiff! +500 ◈</span>'
                 elif punkte_key == "tendenz":
-                    eval_html = '<span class="tipp-eval eval-tendenz">✅ Tendenz! +200 ◈</span>'
+                    eval_html = '<span class="eval-label ev-tendenz">✅ Tendenz! +200 ◈</span>'
                 elif punkte_key == "falsch":
-                    eval_html = '<span class="tipp-eval eval-falsch">❌ Leider falsch</span>'
+                    eval_html = '<span class="eval-label ev-falsch">❌ Leider falsch</span>'
                 else:
-                    eval_html = '<span class="tipp-eval eval-open">— Ausstehend</span>'
+                    eval_html = '<span class="eval-label ev-open">— Ausstehend</span>'
             action_html = f"""
             <div class="mc-action">
-              <div class="tipp-saved-wrap">
-                <div class="tipp-saved-score">✅ {td["heim"]} : {td["gast"]}</div>
+              <div class="tipp-saved">
+                <div class="saved-score">✅ {td["heim"]} : {td["gast"]}</div>
                 {eval_html}
               </div>
             </div>"""
@@ -1847,33 +1662,33 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         elif not erlaubt:
             action_html = '<div class="mc-action"><div class="badge-locked">🔒 Gesperrt</div></div>'
         else:
-            btn_label = f"⏰ Jetzt! (−50◈)" if min_bis <= 60 else "Tippen (−50◈)"
-            warn_html = f'<div class="badge-soon-warn">⚠️ Noch {max(0,min_bis)} Min!</div>' if status == "soon" else ""
+            btn_label = f"Jetzt! (−50◈)" if min_bis <= 60 else "Tippen (−50◈)"
+            warn_html = f'<div class="badge-warn">⚠️ Noch {max(0,min_bis)} Min!</div>' if status == "soon" else ""
             action_html = f"""
             <div class="mc-action">
               {warn_html}
               <form action="/submittipp" method="POST">
                 <input type="hidden" name="spiel_id" value="{sid}">
                 <input type="hidden" name="redirect_gruppe" value="{gruppe_id}">
-                <div class="tipp-form-row">
+                <div class="tipp-row">
                   <input type="number" name="tipp_heim" min="0" max="20" class="score-in" placeholder="0" required>
-                  <span class="score-in-sep">:</span>
+                  <span class="score-sep">:</span>
                   <input type="number" name="tipp_gast" min="0" max="20" class="score-in" placeholder="0" required>
-                  <button type="submit" class="tipp-submit">{btn_label}</button>
+                  <button type="submit" class="tipp-btn">{btn_label}</button>
                 </div>
               </form>
             </div>"""
 
-        delay_cls = f"stagger-{min(i+1,6)}"
+        delay_cls = f"d{min(i+1,6)}"
         spiele_html += f"""
-        <div class="match-card {card_extra} fade-up {delay_cls}" id="spiel-{sid}">
-          <div class="mc-stripe {stripe_cls}"></div>
-          <div class="mc-team-home">
+        <div class="match-card {card_extra} fade-in {delay_cls}" id="spiel-{sid}">
+          <div class="mc-accent {acc_cls}"></div>
+          <div class="mc-home">
             {flag_img(heim_code, 24)}
             <span class="mc-team-name">{spiel['heim']}</span>
           </div>
           {center_html}
-          <div class="mc-team-away">
+          <div class="mc-away">
             {flag_img(gast_code, 24)}
             <span class="mc-team-name">{spiel['gast']}</span>
           </div>
@@ -1884,13 +1699,13 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
     fav_team_html = ""
     if mein_team:
         fav_team_html = f"""
-        <div class="fav-team-row">
+        <div class="fav-row">
           {flag_img(mein_team['code'], 30)}
           <div>
-            <div class="fav-team-name">{mein_team['name']}</div>
-            <div class="fav-team-sub">Gruppe {mein_team['gruppe']} · Mein Favorit</div>
+            <div class="fav-name">{mein_team['name']}</div>
+            <div class="fav-sub">Gruppe {mein_team['gruppe']} · Mein Favorit</div>
           </div>
-          <a href="/choose_team" style="margin-left:auto;font-size:11px;color:var(--muted);text-decoration:none;font-family:'Barlow Condensed';font-weight:700;letter-spacing:1px;">ÄNDERN</a>
+          <a href="/choose_team" style="margin-left:auto;font-size:11px;color:var(--muted);text-decoration:none;font-family:'Rajdhani';font-weight:700;letter-spacing:1px;">ÄNDERN</a>
         </div>"""
 
     pct = int(getippt / total_spiele * 100) if total_spiele > 0 else 0
@@ -1900,7 +1715,7 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
     <div class="page">
       <div class="wrap">
         <!-- Profile + Stats -->
-        <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;margin-bottom:36px;align-items:start;" class="fade-up">
+        <div style="display:grid;grid-template-columns:280px 1fr;gap:18px;margin-bottom:32px;align-items:start;" class="fade-in">
           <div class="profile-card">
             <img class="profile-head" src="https://mc-heads.net/avatar/{username}/80" alt="{username}" onerror="this.style.opacity='0.3'">
             <div class="profile-name">{username}</div>
@@ -1922,66 +1737,63 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
                 <div class="stat-label">📋 Offen</div>
               </div>
             </div>
-            <div class="card" style="padding:18px 20px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                <div style="font-family:'Barlow Condensed';font-weight:800;font-size:12px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;">Tipp-Fortschritt</div>
-                <div style="font-family:'Oswald';font-weight:700;font-size:18px;color:var(--neon);">{pct}%</div>
+            <div class="card" style="padding:16px 18px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <div style="font-family:'Rajdhani';font-weight:800;font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;">Tipp-Fortschritt</div>
+                <div style="font-family:'Bebas Neue';font-size:20px;letter-spacing:2px;color:var(--neon);">{pct}%</div>
               </div>
-              <div style="font-size:13px;color:var(--text2);margin-bottom:10px;font-weight:600;">{getippt} / {total_spiele} Spiele getippt</div>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:8px;font-weight:600;">{getippt} / {total_spiele} Spiele getippt</div>
               <div class="prog-track"><div class="prog-fill" style="width:{pct}%;"></div></div>
             </div>
           </div>
         </div>
 
         <!-- Section Header -->
-        <div class="sec-header fade-up">
-          <div class="sec-tag">⚽ Gruppenphase 2026</div>
+        <div style="margin-bottom:18px;" class="fade-in">
+          <div class="sec-eyebrow">⚽ Gruppenphase 2026</div>
           <div class="sec-title">Spielplan & Tipps</div>
-          <div class="sec-sub">50 ◈ Einsatz · Gesperrt bei Anpfiff · Live-Scores in Echtzeit · <a href="/punkte" style="color:var(--amber);text-decoration:none;font-weight:700;">Punktesystem →</a></div>
+          <div class="sec-sub">50 ◈ Einsatz · Gesperrt bei Anpfiff · Live-Scores in Echtzeit · <a href="/punkte" style="color:var(--copper);text-decoration:none;font-weight:700;">Punktesystem →</a></div>
         </div>
 
         {live_banner}
 
         <!-- Tabs -->
-        <div class="tabs-wrap fade-up">{tabs_html}</div>
+        <div class="tabs-wrap fade-in">{tabs_html}</div>
 
-        <!-- Gruppe Header -->
-        <div class="card fade-up" style="margin-bottom:0;">
+        <!-- Gruppe Block -->
+        <div class="card fade-in">
           <div class="gruppe-header">
-            <div class="gruppe-letter">{gruppe_id}</div>
+            <div class="gr-letter">{gruppe_id}</div>
             <div>
-              <div style="font-family:'Oswald';font-weight:700;font-size:20px;letter-spacing:2px;text-transform:uppercase;">Gruppe {gruppe_id}</div>
-              <div class="gruppe-team-pills" style="margin-top:8px;">{team_pills}</div>
+              <div style="font-family:'Bebas Neue';font-size:22px;letter-spacing:3px;text-transform:uppercase;">Gruppe {gruppe_id}</div>
+              <div class="gr-pills" style="margin-top:8px;">{team_pills}</div>
             </div>
           </div>
-          <div class="match-list">
-            {spiele_html}
-          </div>
+          <div class="match-list">{spiele_html}</div>
         </div>
       </div>
     </div>
 
     <script>
-      function checkLive() {{
-        fetch('/api/live_scores').then(r=>r.json()).then(scores => {{
-          let hasLive = false;
-          for (const [sid, data] of Object.entries(scores)) {{
-            if (data.status === 'live' || data.status === 'final') {{
-              hasLive = true;
-              const el = document.getElementById('spiel-' + sid);
-              if (el) {{
-                if ((data.status==='live' && !el.classList.contains('is-live')) ||
-                    (data.status==='final' && !el.classList.contains('is-final'))) {{
-                  window.location.reload(); return;
+      function checkLive(){{
+        fetch('/api/live_scores').then(r=>r.json()).then(scores=>{{
+          let hasLive=false;
+          for(const[sid,data] of Object.entries(scores)){{
+            if(data.status==='live'||data.status==='final'){{
+              hasLive=true;
+              const el=document.getElementById('spiel-'+sid);
+              if(el){{
+                if((data.status==='live'&&!el.classList.contains('is-live'))||
+                   (data.status==='final'&&!el.classList.contains('is-final'))){{
+                  window.location.reload();return;
                 }}
               }}
             }}
           }}
-          if (hasLive) setTimeout(()=>window.location.reload(), 30000);
+          if(hasLive)setTimeout(()=>window.location.reload(),30000);
         }}).catch(()=>{{}});
       }}
-      setTimeout(checkLive, 10000);
-      setInterval(checkLive, 60000);
+      setTimeout(checkLive,10000);setInterval(checkLive,60000);
     </script>
     </body></html>"""
 
@@ -2013,7 +1825,7 @@ def gruppe_ansicht(gruppe_id):
     return render_gruppe_page(username, gruppe_id, "dashboard")
 
 # ==========================================
-# LEADERBOARD mit Suche
+# LEADERBOARD
 # ==========================================
 @app.route('/leaderboard')
 def leaderboard():
@@ -2033,40 +1845,39 @@ def leaderboard():
             team = next((t for t in ALLE_TEAMS if t["name"] == entry.get("lieblingsteam")), None)
             team_html = f'{flag_img(team["code"],16)} {team["name"]}' if team else ""
             return f"""
-            <div class="podium-card {cls}">
-              <div class="podium-medal">{medal}</div>
-              <img class="podium-head" src="https://mc-heads.net/avatar/{entry['username']}/56" alt="" onerror="this.style.display='none'">
-              <div class="podium-name">{entry['username']}</div>
-              <div style="font-size:12px;color:var(--muted);font-family:'Barlow Condensed';font-weight:700;margin-top:3px;">{team_html}</div>
-              <div class="podium-pts">{entry['points']:,} ◈</div>
+            <div class="{cls}">
+              <div class="po-medal">{medal}</div>
+              <img class="po-head" src="https://mc-heads.net/avatar/{entry['username']}/56" alt="" onerror="this.style.display='none'">
+              <div class="po-name">{entry['username']}</div>
+              <div style="font-size:12px;color:var(--muted);font-family:'Rajdhani';font-weight:700;margin-top:3px;">{team_html}</div>
+              <div class="po-pts">{entry['points']:,} ◈</div>
             </div>"""
-
         podium_html = f"""
-        <div class="podium-wrap fade-up">
-          {podium_card(lb[1], 2, "podium-card podium-2")}
-          {podium_card(lb[0], 1, "podium-card podium-1")}
-          {podium_card(lb[2], 3, "podium-card podium-3")}
+        <div class="podium-wrap fade-in">
+          {podium_card(lb[1], 2, "podium-card po-2")}
+          {podium_card(lb[0], 1, "podium-card po-1")}
+          {podium_card(lb[2], 3, "podium-card po-3")}
         </div>"""
 
     # Rows
     rows_html = ""
     for i, entry in enumerate(lb, 1):
-        rank_class = f"rank-{i}" if i <= 3 else ""
+        rank_class = f"rk-{i}" if i <= 3 else ""
         is_me = (entry["username"] == username)
-        if is_me: rank_class += " rank-me"
+        if is_me: rank_class += " rk-me"
         medal, rank_color = medals.get(i, ("",""))
         rank_display = f'<span class="lb-rank {rank_color}">{medal or str(i)}</span>'
         team = next((t for t in ALLE_TEAMS if t["name"] == entry.get("lieblingsteam")), None)
         team_html = f'{flag_img(team["code"],16)} {team["name"]}' if team else ""
-        me_badge = '<span class="lb-me-badge">DU</span>' if is_me else ""
+        me_badge = '<span class="lb-me-chip">DU</span>' if is_me else ""
         rows_html += f"""
         <div class="lb-row {rank_class}" data-username="{entry['username'].lower()}">
           {rank_display}
           <div class="lb-user-cell">
-            <img class="lb-head" src="https://mc-heads.net/avatar/{entry['username']}/32" alt="" onerror="this.style.display='none'">
+            <img class="lb-av" src="https://mc-heads.net/avatar/{entry['username']}/32" alt="" onerror="this.style.display='none'">
             <div>
-              <div class="lb-name">{entry['username']} {me_badge}</div>
-              <div class="lb-team-small">{team_html}</div>
+              <div class="lb-username">{entry['username']} {me_badge}</div>
+              <div class="lb-team-sm">{team_html}</div>
             </div>
           </div>
           <div class="lb-tipps-cell">{entry['tipps']} Tipps</div>
@@ -2074,7 +1885,7 @@ def leaderboard():
         </div>"""
 
     if not lb:
-        rows_html = '<div style="text-align:center;color:var(--muted);padding:60px;font-family:\'Barlow Condensed\';font-weight:700;font-size:16px;letter-spacing:1px;">NOCH KEINE SPIELER REGISTRIERT</div>'
+        rows_html = '<div style="text-align:center;color:var(--muted);padding:60px;font-family:\'Rajdhani\';font-weight:700;font-size:15px;letter-spacing:1px;">NOCH KEINE SPIELER REGISTRIERT</div>'
 
     my_rank = next((i+1 for i,e in enumerate(lb) if e["username"] == username), None)
     my_rank_txt = f"Platz {my_rank} von {len(lb)}" if my_rank else "–"
@@ -2082,63 +1893,46 @@ def leaderboard():
     return BASE_HTML + f"""
     {navbar}
     <div class="page">
-      <div class="wrap" style="max-width:860px;">
-        <div style="margin-bottom:36px;" class="fade-up">
-          <div class="sec-tag">🏆 Bestenliste</div>
-          <div class="sec-title" style="font-size:48px;letter-spacing:2px;">RANGLISTE</div>
+      <div class="wrap" style="max-width:880px;">
+        <div style="margin-bottom:32px;" class="fade-in">
+          <div class="sec-eyebrow">🏆 Bestenliste</div>
+          <div style="font-family:'Bebas Neue';font-size:56px;letter-spacing:4px;background:linear-gradient(135deg,var(--gold3),var(--copper));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">RANGLISTE</div>
           <div class="sec-sub">Dein Rang: <strong style="color:var(--gold);">{my_rank_txt}</strong></div>
         </div>
 
         {podium_html}
 
-        <!-- Suche -->
-        <div class="lb-search-wrap fade-up">
+        <div class="lb-search-wrap fade-in">
           <div class="lb-search-icon">🔍</div>
           <input type="text" class="lb-search" id="lb-search" placeholder="Spieler suchen..." autocomplete="off" spellcheck="false">
         </div>
 
-        <!-- Header -->
-        <div class="lb-header-row fade-up">
-          <div>#</div>
-          <div>Spieler</div>
-          <div style="text-align:center;">Tipps</div>
-          <div style="text-align:right;">Punkte</div>
+        <div class="lb-head-row fade-in">
+          <div>#</div><div>Spieler</div><div style="text-align:center;">Tipps</div><div style="text-align:right;">Punkte</div>
         </div>
-
-        <!-- Rows -->
-        <div id="lb-list">
-          {rows_html}
-        </div>
-        <div id="lb-empty" style="display:none;text-align:center;padding:40px;color:var(--muted);font-family:'Barlow Condensed';font-weight:700;letter-spacing:1px;font-size:14px;">
-          ⚽ KEIN SPIELER GEFUNDEN
-        </div>
+        <div id="lb-list">{rows_html}</div>
+        <div id="lb-empty" style="display:none;text-align:center;padding:40px;color:var(--muted);font-family:'Rajdhani';font-weight:700;letter-spacing:1px;font-size:14px;">⚽ KEIN SPIELER GEFUNDEN</div>
       </div>
     </div>
-
     <script>
-      const search = document.getElementById('lb-search');
-      const rows = document.querySelectorAll('.lb-row[data-username]');
-      const empty = document.getElementById('lb-empty');
-
-      search.addEventListener('input', () => {{
-        const q = search.value.toLowerCase().trim();
-        let found = 0;
-        rows.forEach(row => {{
-          const name = row.getAttribute('data-username');
-          if (!q || name.includes(q)) {{
-            row.classList.remove('lb-hidden');
-            found++;
-          }} else {{
-            row.classList.add('lb-hidden');
-          }}
+      const search=document.getElementById('lb-search');
+      const rows=document.querySelectorAll('.lb-row[data-username]');
+      const empty=document.getElementById('lb-empty');
+      search.addEventListener('input',()=>{{
+        const q=search.value.toLowerCase().trim();
+        let found=0;
+        rows.forEach(row=>{{
+          const name=row.getAttribute('data-username');
+          if(!q||name.includes(q)){{row.classList.remove('lb-hidden');found++;}}
+          else row.classList.add('lb-hidden');
         }});
-        empty.style.display = found === 0 ? 'block' : 'none';
+        empty.style.display=found===0?'block':'none';
       }});
     </script>
     </body></html>"""
 
 # ==========================================
-# PUNKTE-SYSTEM
+# PUNKTE
 # ==========================================
 @app.route('/punkte')
 def punkte():
@@ -2150,16 +1944,15 @@ def punkte():
     return BASE_HTML + f"""
     {navbar}
     <div class="page">
-      <div class="wrap" style="max-width:760px;">
-        <div style="margin-bottom:40px;" class="fade-up">
-          <div class="sec-tag">📋 Spielregeln</div>
-          <div class="sec-title" style="font-size:44px;">PUNKTESYSTEM</div>
+      <div class="wrap" style="max-width:780px;">
+        <div style="margin-bottom:36px;" class="fade-in">
+          <div class="sec-eyebrow">📋 Spielregeln</div>
+          <div style="font-family:'Bebas Neue';font-size:50px;letter-spacing:3px;background:linear-gradient(135deg,var(--gold3),var(--copper));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">PUNKTESYSTEM</div>
           <div class="sec-sub">So verdienst du Punkte – und so verlierst du sie</div>
         </div>
 
-        <!-- Punktekategorien -->
-        <div class="card fade-up stagger-1" style="margin-bottom:16px;border-color:rgba(255,215,0,0.12);">
-          <div style="font-family:'Oswald';font-weight:700;font-size:22px;letter-spacing:2px;color:var(--gold);margin-bottom:16px;">🎯 TREFFERQUOTEN</div>
+        <div class="card fade-in d1" style="margin-bottom:14px;border-color:rgba(245,200,66,0.15);">
+          <div style="font-family:'Bebas Neue';font-size:24px;letter-spacing:3px;color:var(--gold);margin-bottom:16px;">🎯 TREFFERQUOTEN</div>
           <div class="pts-grid">
             <div class="pts-row top">
               <div>
@@ -2182,7 +1975,7 @@ def punkte():
               </div>
               <div class="pts-val">+200 ◈</div>
             </div>
-            <div class="pts-row" style="border-color:rgba(255,69,0,0.25);background:rgba(255,69,0,0.04);">
+            <div class="pts-row" style="border-color:rgba(255,87,34,0.25);background:rgba(255,87,34,0.04);">
               <div>
                 <div class="pts-label">❌ Falsch getippt</div>
                 <div class="pts-sub">Falsche Tendenz</div>
@@ -2192,42 +1985,36 @@ def punkte():
           </div>
         </div>
 
-        <div class="card fade-up stagger-2" style="margin-bottom:16px;border-color:rgba(255,165,0,0.1);">
-          <div style="font-family:'Oswald';font-weight:700;font-size:22px;letter-spacing:2px;color:var(--gold);margin-bottom:16px;">💰 STARTKAPITAL & EINSATZ</div>
+        <div class="card fade-in d2" style="margin-bottom:14px;border-color:rgba(224,123,57,0.12);">
+          <div style="font-family:'Bebas Neue';font-size:24px;letter-spacing:3px;color:var(--gold);margin-bottom:16px;">💰 STARTKAPITAL & EINSATZ</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="pts-row">
-              <div>
-                <div class="pts-label">Startkapital</div>
-                <div class="pts-sub">Bei der Registrierung</div>
-              </div>
+              <div><div class="pts-label">Startkapital</div><div class="pts-sub">Bei der Registrierung</div></div>
               <div class="pts-val">1.000 ◈</div>
             </div>
-            <div class="pts-row" style="border-color:rgba(255,69,0,0.25);background:rgba(255,69,0,0.04);">
-              <div>
-                <div class="pts-label">Einsatz pro Tipp</div>
-                <div class="pts-sub">Wird sofort abgezogen</div>
-              </div>
+            <div class="pts-row" style="border-color:rgba(255,87,34,0.25);background:rgba(255,87,34,0.04);">
+              <div><div class="pts-label">Einsatz pro Tipp</div><div class="pts-sub">Wird sofort abgezogen</div></div>
               <div class="pts-val neg">−50 ◈</div>
             </div>
           </div>
         </div>
 
-        <div class="card fade-up stagger-3" style="margin-bottom:24px;border-color:rgba(255,48,48,0.15);">
-          <div style="font-family:'Oswald';font-weight:700;font-size:22px;letter-spacing:2px;color:var(--live);margin-bottom:16px;">🔒 TIPP-SPERRE</div>
-          <div class="pts-row" style="border-color:rgba(255,48,48,0.3);background:rgba(255,48,48,0.05);">
+        <div class="card fade-in d3" style="margin-bottom:28px;border-color:rgba(244,67,54,0.18);">
+          <div style="font-family:'Bebas Neue';font-size:24px;letter-spacing:3px;color:var(--live);margin-bottom:16px;">🔒 TIPP-SPERRE</div>
+          <div class="pts-row" style="border-color:rgba(244,67,54,0.3);background:rgba(244,67,54,0.05);">
             <div>
               <div class="pts-label">Gesperrt bei Spielbeginn</div>
               <div class="pts-sub">Sobald das Spiel als LIVE erkannt wird – kein Tippen mehr möglich</div>
             </div>
-            <div style="font-family:'Oswald';font-weight:700;font-size:28px;color:var(--live);">LIVE</div>
+            <div style="font-family:'Bebas Neue';font-size:30px;color:var(--live);letter-spacing:2px;">LIVE</div>
           </div>
-          <div style="margin-top:14px;padding:14px 18px;background:var(--bg3);border-radius:8px;font-size:13px;color:var(--text2);line-height:1.7;font-weight:500;">
-            📡 <strong style="color:var(--text);">Live-Scores:</strong> Während Spiele laufen siehst du den Echtzeit-Spielstand direkt im Dashboard. Die Seite aktualisiert sich automatisch alle 30 Sekunden wenn Live-Spiele laufen.
+          <div style="margin-top:12px;padding:12px 16px;background:var(--g3);border-radius:8px;font-size:13px;color:var(--text2);line-height:1.8;font-weight:500;">
+            📡 <strong style="color:var(--text);">Live-Scores:</strong> Während Spiele laufen siehst du den Echtzeit-Spielstand direkt im Dashboard. Die Seite aktualisiert sich automatisch alle 30 Sekunden.
           </div>
         </div>
 
-        <div style="text-align:center;" class="fade-up stagger-4">
-          <a href="/dashboard" class="btn btn-fire" style="font-size:18px;padding:16px 40px;">⚽ Jetzt tippen</a>
+        <div style="text-align:center;" class="fade-in d4">
+          <a href="/dashboard" class="btn btn-primary" style="font-size:17px;padding:15px 40px;">⚽ Jetzt tippen</a>
         </div>
       </div>
     </div>
