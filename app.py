@@ -24,9 +24,9 @@ except ImportError:
     REQUESTS_AVAILABLE = False
     print("[WARN] 'requests' nicht installiert – Live-Scores deaktiviert. Installiere mit: pip install requests")
 
-
+# ==========================================
 # KONFIGURATION
-
+# ==========================================
 chatlog_ordner = r"C:\Users\zaine\Downloads\mmc-develop-win32\MultiMC\instances\1.8.9\.minecraft\neoessentials\chatlog"
 
 DATA_FILE = "wm2026_data.json"
@@ -95,14 +95,23 @@ def fetch_live_scores_thesportsdb():
     global live_scores_cache
     if not REQUESTS_AVAILABLE:
         return
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    # TheSportsDB: heute's Spiele
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
     url = f"https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d={today}&s=Soccer"
     try:
-        resp = req_lib.get(url, timeout=5)
+        resp = req_lib.get(url, timeout=8)
         if resp.status_code != 200:
+            print(f"[LIVE] TheSportsDB HTTP {resp.status_code}")
             return
         data = resp.json()
         events = data.get("events") or []
+        print(f"[LIVE] TheSportsDB: {len(events)} Soccer-Events heute")
+        # Debug: zeige alle Ligen
+        ligen = set(ev.get("strLeague","?") for ev in events)
+        if ligen:
+            print(f"[LIVE] Ligen: {', '.join(sorted(ligen))}")
+
+        matched = 0
         for gruppe_data in WM_GRUPPEN.values():
             for spiel in gruppe_data["spiele"]:
                 heim = spiel["heim"].lower()
@@ -112,27 +121,79 @@ def fetch_live_scores_thesportsdb():
                     ev_heim = (ev.get("strHomeTeam") or "").lower()
                     ev_gast = (ev.get("strAwayTeam") or "").lower()
                     ev_liga = (ev.get("strLeague") or "").lower()
-                    if "world cup" not in ev_liga and "fifa" not in ev_liga:
+                    # Erweiterte Liga-Erkennung für WM 2026
+                    is_wm = any(kw in ev_liga for kw in [
+                        "world cup", "fifa", "wm", "mondial", "copa do mundo", "coupe du monde"
+                    ])
+                    if not is_wm:
                         continue
                     if _teams_match(heim, ev_heim) and _teams_match(gast, ev_gast):
-                        status = ev.get("strStatus", "").lower()
+                        status = ev.get("strStatus", "").lower().strip()
                         score_home = ev.get("intHomeScore")
                         score_away = ev.get("intAwayScore")
                         cache_entry = {"status": "upcoming", "heim": None, "gast": None, "minuto": None}
-                        if status in ["ft", "aet", "pen", "finished", "match finished"]:
+                        if status in ["ft", "aet", "pen", "finished", "match finished", "after extra time", "penalties"]:
                             cache_entry["status"] = "final"
                             cache_entry["heim"] = int(score_home) if score_home is not None else None
                             cache_entry["gast"] = int(score_away) if score_away is not None else None
-                        elif status.isdigit() or status in ["ht", "live", "in progress"]:
+                        elif (status.isdigit() or status in ["ht", "live", "in progress", "1h", "2h"]
+                              or "'" in status or "+" in status):
                             cache_entry["status"] = "live"
                             cache_entry["heim"] = int(score_home) if score_home is not None else 0
                             cache_entry["gast"] = int(score_away) if score_away is not None else 0
                             if status.isdigit():
                                 cache_entry["minuto"] = int(status)
+                            elif status == "ht":
+                                cache_entry["minuto"] = 45
                         live_scores_cache[sid] = cache_entry
+                        matched += 1
+                        print(f"[LIVE] Match gefunden: {spiel['heim']} vs {spiel['gast']} → {cache_entry}")
                         break
+        if matched == 0:
+            print(f"[LIVE] Kein WM-Spiel in TheSportsDB gefunden. Prüfe zeitbasiertes Fallback.")
+            # Zeitbasiertes Fallback: Wenn Spiel nach Zeit LIVE sein sollte → 0:0 setzen
+            _apply_time_based_live_fallback()
     except Exception as e:
         print(f"[LIVE] Fehler beim Score-Abruf: {e}")
+        _apply_time_based_live_fallback()
+
+def _apply_time_based_live_fallback():
+    """
+    Wenn die API keinen Score liefert, aber das Spiel nach Uhrzeit laufen müsste:
+    Setze status=live mit Score None (zeigt ?:? an) damit zumindest LIVE-Badge erscheint.
+    Überschreibt NICHT bereits gespeicherte echte Scores.
+    """
+    jetzt = get_now_utc()
+    for gruppe_data in WM_GRUPPEN.values():
+        for spiel in gruppe_data["spiele"]:
+            sid = spiel["id"]
+            dt_utc = parse_spiel_datetime(spiel)
+            if dt_utc is None:
+                continue
+            delta_min = (jetzt - dt_utc).total_seconds() / 60
+            # Spiel läuft nach Zeit (0..110 Minuten nach Anpfiff)
+            if 0 <= delta_min < 110:
+                existing = live_scores_cache.get(sid, {})
+                # Nur setzen wenn noch kein echter Score vorhanden
+                if existing.get("status") not in ("live", "final"):
+                    live_scores_cache[sid] = {
+                        "status": "live",
+                        "heim": None,  # Kein Score verfügbar
+                        "gast": None,
+                        "minuto": int(delta_min),
+                        "fallback": True
+                    }
+                    print(f"[LIVE-FALLBACK] {spiel['heim']} vs {spiel['gast']} → LIVE (Minute ~{int(delta_min)})")
+            elif delta_min >= 110:
+                existing = live_scores_cache.get(sid, {})
+                if existing.get("status") not in ("final",) and existing.get("fallback"):
+                    live_scores_cache[sid] = {
+                        "status": "final",
+                        "heim": None,
+                        "gast": None,
+                        "fallback": True
+                    }
+                    print(f"[LIVE-FALLBACK] {spiel['heim']} vs {spiel['gast']} → FINAL (Zeit abgelaufen)")
 
 def _teams_match(our_name, api_name):
     TEAM_ALIASES = {
@@ -445,28 +506,47 @@ TEAM_CODE = {t["name"]: t["code"] for t in ALLE_TEAMS}
 # HELPER: Spielzeit-Check
 # ==========================================
 def parse_spiel_datetime(spiel):
+    """
+    Spielzeiten sind in CEST (UTC+2, Mitteleuropäische Sommerzeit).
+    Wir konvertieren zu UTC für konsistenten Vergleich mit datetime.utcnow().
+    """
     try:
         dt_str = f"{spiel['datum']} {spiel['uhrzeit']}"
-        return datetime.datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
+        dt_cest = datetime.datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
+        # CEST = UTC+2 → subtrahiere 2h um UTC zu bekommen
+        dt_utc = dt_cest - datetime.timedelta(hours=2)
+        return dt_utc
     except:
         return None
 
+def get_now_local():
+    """
+    Aktuelle lokale Zeit des Servers (CEST/CET).
+    Spielzeiten im Spielplan sind in mitteleuropäischer Zeit angegeben,
+    also verwenden wir datetime.now() (Ortszeit des Servers) statt utcnow().
+    """
+    return datetime.datetime.now()
+
 def get_spiel_status(spiel):
     sid = spiel["id"]
+    # API-Cache hat Vorrang wenn echte Live-Daten vorliegen
     if sid in live_scores_cache:
-        status = live_scores_cache[sid].get("status", "upcoming")
-        if status in ("live", "final"):
-            return status
-    dt = parse_spiel_datetime(spiel)
-    if dt is None:
+        cached_status = live_scores_cache[sid].get("status", "upcoming")
+        if cached_status in ("live", "final"):
+            return cached_status
+    # Zeitbasierter Fallback — Spielzeiten sind CEST (Ortszeit Mitteleuropa)
+    dt_local = parse_spiel_datetime(spiel)
+    if dt_local is None:
         return "upcoming"
-    jetzt = datetime.datetime.now()
-    delta_min = (jetzt - dt).total_seconds() / 60
+    jetzt = get_now_local()
+    delta_min = (jetzt - dt_local).total_seconds() / 60
+    # Debug-Ausgabe damit man es im Terminal sehen kann
+    # print(f"[STATUS] {sid}: jetzt={jetzt}, anpfiff={dt_local}, delta={delta_min:.1f} min")
     if delta_min < -30:
         return "upcoming"
     elif -30 <= delta_min < 0:
         return "soon"
-    elif 0 <= delta_min < 105:
+    elif 0 <= delta_min < 115:   # 90 Min Spiel + 25 Min Puffer für Nachspielzeit
         return "live"
     else:
         return "final"
@@ -482,11 +562,11 @@ def get_live_score(spiel_id):
     return None
 
 def minuten_bis_spiel(spiel):
-    dt = parse_spiel_datetime(spiel)
-    if dt is None:
+    dt_local = parse_spiel_datetime(spiel)
+    if dt_local is None:
         return 9999
-    jetzt = datetime.datetime.now()
-    return int((dt - jetzt).total_seconds() / 60)
+    jetzt = get_now_local()
+    return int((dt_local - jetzt).total_seconds() / 60)
 
 def get_day_label(spiel):
     """
@@ -1311,6 +1391,8 @@ BASE_HTML = """<!DOCTYPE html>
 # ==========================================
 # NAVBAR
 # ==========================================
+ADMIN_USER = "Lattenrost1234"
+
 def get_navbar(username, points, lieblingsteam, active_page="dashboard"):
     team_code = TEAM_CODE.get(lieblingsteam, "")
     team_flag = flag_img(team_code, 18) if team_code else ""
@@ -1319,6 +1401,8 @@ def get_navbar(username, points, lieblingsteam, active_page="dashboard"):
         ("leaderboard", "/leaderboard", "🏆 Rangliste"),
         ("punkte", "/punkte", "📋 Regeln"),
     ]
+    if username == ADMIN_USER:
+        pages.append(("adminpanel", "/adminpanel", "🛠️ Admin"))
     links = ""
     for pid, url, label in pages:
         ac = "active" if active_page == pid else ""
@@ -1461,7 +1545,7 @@ def register():
             <div style="font-family:'Rajdhani';font-weight:800;font-size:13px;letter-spacing:2px;color:var(--copper);margin-bottom:12px;text-transform:uppercase;">📋 So geht's:</div>
             <div>1. Logge dich auf <strong style="color:var(--text);">GrieferGames</strong> ein</div>
             <div>2. Schreibe diese Nachricht im Chat:</div>
-            <div style="margin:10px 0 0 14px;"><code>/msg HostCasino #verifyWM {code}</code></div>
+            <div style="margin:10px 0 0 14px;"><code>/msg Lattenrost1234 #verifyWM {code}</code></div>
             <div style="margin-top:14px;color:var(--muted);font-size:12px;font-family:'Rajdhani';font-weight:600;">
               ⚡ Lass dieses Fenster offen – das System erkennt die Nachricht automatisch.
             </div>
@@ -2189,59 +2273,563 @@ def submit_tipp():
     return redirect(url_for('dashboard'))
 
 # ==========================================
-# AUSWERTUNG (Admin)
+# ADMIN PANEL
 # ==========================================
-@app.route('/auswertung')
-def auswertung():
-    key = request.args.get("key", "")
-    if key != "ADMIN1337":
-        return "Kein Zugriff", 403
-    spiel_id = request.args.get("spiel_id")
-    heim_tore = int(request.args.get("heim", 0))
-    gast_tore = int(request.args.get("gast", 0))
-    if not spiel_id:
-        return "spiel_id fehlt", 400
+ADMIN_CSS = """
+<style>
+.ap-wrap{max-width:1100px;margin:0 auto;padding:32px 24px 100px;}
+.ap-hero{
+  display:flex;align-items:center;gap:16px;margin-bottom:36px;
+  padding:20px 28px;
+  background:linear-gradient(135deg,rgba(255,87,34,0.12),rgba(245,200,66,0.06));
+  border:1px solid rgba(255,87,34,0.35);border-radius:14px;
+}
+.ap-hero-icon{font-size:42px;line-height:1;}
+.ap-hero-title{font-family:'Bebas Neue';font-size:38px;letter-spacing:4px;
+  background:linear-gradient(90deg,var(--fire2),var(--gold3));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.ap-hero-sub{font-family:'Rajdhani';font-weight:700;font-size:12px;letter-spacing:2px;
+  color:var(--muted);text-transform:uppercase;margin-top:2px;}
 
-    def tendenz(h, g):
-        if h > g: return "H"
-        if h < g: return "G"
-        return "U"
+/* Group section */
+.ap-gruppe-header{
+  display:flex;align-items:center;gap:14px;
+  margin:28px 0 12px;padding-bottom:10px;
+  border-bottom:1px solid rgba(245,200,66,0.12);
+}
+.ap-gr-letter{
+  font-family:'Bebas Neue';font-size:48px;line-height:1;
+  background:linear-gradient(135deg,var(--gold3),var(--copper));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  min-width:40px;
+}
+.ap-gr-label{font-family:'Rajdhani';font-weight:800;font-size:15px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--text2);}
 
-    echte_tendenz = tendenz(heim_tore, gast_tore)
+/* Match row */
+.ap-match{
+  display:grid;
+  grid-template-columns:180px 1fr 340px;
+  align-items:center;gap:16px;
+  background:var(--card2);
+  border:1px solid var(--border3);
+  border-radius:10px;padding:14px 18px;
+  margin-bottom:8px;transition:border-color .2s;
+}
+.ap-match:hover{border-color:rgba(255,255,255,0.1);}
+.ap-match.status-live{border-color:rgba(244,67,54,0.4);background:rgba(244,67,54,0.05);}
+.ap-match.status-final{border-color:rgba(0,229,160,0.25);background:rgba(0,229,160,0.03);}
+.ap-match.status-upcoming{border-color:rgba(41,182,246,0.15);}
+
+.ap-match-teams{
+  font-family:'Rajdhani';font-weight:800;font-size:15px;letter-spacing:.5px;
+  text-transform:uppercase;line-height:1.5;
+}
+.ap-match-meta{font-size:11px;color:var(--muted);font-weight:600;font-family:'Rajdhani';
+  letter-spacing:1px;margin-top:2px;}
+.ap-match-id{
+  font-family:'Bebas Neue';font-size:13px;letter-spacing:2px;
+  color:var(--muted);background:var(--g3);padding:2px 8px;border-radius:4px;
+  display:inline-block;margin-top:3px;
+}
+
+/* Status badge in admin */
+.ap-status{
+  display:flex;align-items:center;gap:8px;
+  font-family:'Rajdhani';font-weight:700;font-size:11px;letter-spacing:1.5px;
+  text-transform:uppercase;
+}
+.ap-s-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.ap-s-live .ap-s-dot{background:var(--live);animation:dotBlink .7s step-end infinite;}
+.ap-s-live{color:var(--live);}
+.ap-s-final .ap-s-dot{background:var(--neon);}
+.ap-s-final{color:var(--neon);}
+.ap-s-upcoming .ap-s-dot{background:var(--sky);}
+.ap-s-upcoming{color:var(--sky);}
+
+/* Tipps summary */
+.ap-tipps-count{
+  font-family:'Bebas Neue';font-size:22px;letter-spacing:1px;color:var(--gold);
+}
+.ap-tipps-label{font-family:'Rajdhani';font-weight:700;font-size:10px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:1.5px;}
+
+/* Action area */
+.ap-actions{display:flex;flex-direction:column;gap:8px;}
+
+/* Status toggle buttons */
+.ap-btn-row{display:flex;gap:6px;flex-wrap:wrap;}
+.ap-btn{
+  font-family:'Rajdhani';font-weight:800;font-size:11px;letter-spacing:1.5px;
+  text-transform:uppercase;padding:7px 14px;border-radius:6px;
+  border:1.5px solid transparent;cursor:pointer;transition:all .15s;
+  background:transparent;
+}
+.ap-btn-live{color:var(--live);border-color:rgba(244,67,54,0.4);}
+.ap-btn-live:hover,.ap-btn-live.active{
+  background:rgba(244,67,54,0.18);border-color:rgba(244,67,54,0.8);
+  box-shadow:0 0 12px rgba(244,67,54,0.3);
+}
+.ap-btn-live.active{background:rgba(244,67,54,0.25);}
+.ap-btn-upcoming{color:var(--sky);border-color:rgba(41,182,246,0.35);}
+.ap-btn-upcoming:hover,.ap-btn-upcoming.active{background:rgba(41,182,246,0.12);border-color:rgba(41,182,246,0.7);}
+.ap-btn-upcoming.active{background:rgba(41,182,246,0.2);}
+
+/* Abschluss form */
+.ap-finish-form{
+  background:var(--g3);border:1px solid rgba(0,229,160,0.2);
+  border-radius:8px;padding:10px 14px;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+}
+.ap-finish-form.hidden{display:none;}
+.ap-score-in{
+  width:44px;height:36px;
+  background:var(--g2);border:1px solid rgba(255,255,255,0.12);
+  color:#fff;border-radius:6px;text-align:center;
+  font-family:'Bebas Neue';font-size:20px;
+  -moz-appearance:textfield;appearance:none;
+}
+.ap-score-in::-webkit-inner-spin-button,.ap-score-in::-webkit-outer-spin-button{-webkit-appearance:none;}
+.ap-score-in:focus{outline:none;border-color:var(--neon);box-shadow:0 0 0 3px rgba(0,229,160,0.12);}
+.ap-score-sep{font-family:'Bebas Neue';font-size:18px;color:var(--muted);}
+.ap-finish-btn{
+  background:linear-gradient(135deg,var(--neon2),var(--neon));
+  color:#000;border:none;border-radius:6px;
+  padding:8px 16px;font-family:'Rajdhani';font-weight:800;font-size:11px;
+  letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;
+  transition:all .2s;white-space:nowrap;
+}
+.ap-finish-btn:hover{transform:scale(1.04);box-shadow:0 4px 14px rgba(0,229,160,0.4);}
+.ap-finish-label{font-family:'Rajdhani';font-weight:700;font-size:12px;color:var(--neon2);
+  letter-spacing:.5px;}
+
+/* Result tag */
+.ap-result-tag{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(0,229,160,0.1);border:1px solid rgba(0,229,160,0.3);
+  border-radius:6px;padding:5px 12px;
+  font-family:'Bebas Neue';font-size:20px;letter-spacing:2px;color:var(--neon);
+}
+
+/* User tipps table */
+.ap-tipps-table{
+  width:100%;border-collapse:collapse;font-size:12px;
+  font-family:'Rajdhani';font-weight:600;
+}
+.ap-tipps-table th{
+  text-align:left;padding:5px 8px;
+  color:var(--muted);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  border-bottom:1px solid var(--border3);
+}
+.ap-tipps-table td{padding:5px 8px;border-bottom:1px solid rgba(255,255,255,0.03);}
+.ap-tipps-table tr:last-child td{border-bottom:none;}
+
+/* Toast */
+#ap-toast{
+  position:fixed;bottom:30px;right:30px;z-index:9999;
+  background:var(--card);border:1px solid rgba(0,229,160,0.4);
+  border-radius:10px;padding:14px 22px;
+  font-family:'Rajdhani';font-weight:700;font-size:14px;
+  color:var(--neon);letter-spacing:.5px;
+  display:none;animation:toastIn .3s ease;
+  box-shadow:0 8px 30px rgba(0,0,0,0.5),0 0 20px rgba(0,229,160,0.1);
+}
+@keyframes toastIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* Expand toggle */
+.ap-expand-btn{
+  background:none;border:none;cursor:pointer;
+  color:var(--muted);font-size:11px;font-family:'Rajdhani';font-weight:700;
+  letter-spacing:1px;text-transform:uppercase;padding:4px 8px;
+  border-radius:4px;transition:all .15s;
+}
+.ap-expand-btn:hover{color:var(--text2);background:rgba(255,255,255,0.04);}
+.ap-tipps-panel{display:none;margin-top:8px;}
+.ap-tipps-panel.open{display:block;}
+
+/* Auswertung result rows */
+.ap-result-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:5px 10px;border-radius:5px;
+}
+.ap-result-row.perfekt{background:rgba(245,200,66,0.08);}
+.ap-result-row.tendenz_tor{background:rgba(0,229,160,0.06);}
+.ap-result-row.tendenz{background:rgba(41,182,246,0.06);}
+.ap-result-row.falsch{background:rgba(255,87,34,0.05);}
+</style>
+"""
+
+def tendenz_calc(h, g):
+    if h > g: return "H"
+    if h < g: return "G"
+    return "U"
+
+def do_auswertung(spiel_id, heim_tore, gast_tore):
+    """Führt die Auswertung für ein Spiel durch und gibt Ergebnisliste zurück."""
+    echte_tendenz = tendenz_calc(heim_tore, gast_tore)
     echte_diff = heim_tore - gast_tore
-    auswertungen = []
-
+    results = []
     for uname, data in user_db.items():
         tipp = data.get("tipps", {}).get(spiel_id)
         if not tipp:
             continue
+        # Skip if already evaluated
+        if tipp.get("punkte_result"):
+            continue
         th, tg = tipp["heim"], tipp["gast"]
         if th == heim_tore and tg == gast_tore:
-            punkte_val = PUNKTE_SYSTEM["perfekt"]; ergebnis = "perfekt"
-        elif tendenz(th, tg) == echte_tendenz and (th - tg) == echte_diff:
-            punkte_val = PUNKTE_SYSTEM["tendenz_tor"]; ergebnis = "tendenz_tor"
-        elif tendenz(th, tg) == echte_tendenz:
-            punkte_val = PUNKTE_SYSTEM["tendenz"]; ergebnis = "tendenz"
+            pval = PUNKTE_SYSTEM["perfekt"]; erg = "perfekt"
+        elif tendenz_calc(th, tg) == echte_tendenz and (th - tg) == echte_diff:
+            pval = PUNKTE_SYSTEM["tendenz_tor"]; erg = "tendenz_tor"
+        elif tendenz_calc(th, tg) == echte_tendenz:
+            pval = PUNKTE_SYSTEM["tendenz"]; erg = "tendenz"
         else:
-            punkte_val = PUNKTE_SYSTEM["falsch"]; ergebnis = "falsch"
-
-        user_db[uname]["points"] = user_db[uname].get("points", 0) + punkte_val
-        user_db[uname]["tipps"][spiel_id]["punkte_result"] = ergebnis
-        auswertungen.append(f"{uname}: {th}:{tg} → {ergebnis} (+{punkte_val})")
-
+            pval = PUNKTE_SYSTEM["falsch"]; erg = "falsch"
+        user_db[uname]["points"] = user_db[uname].get("points", 0) + pval
+        user_db[uname]["tipps"][spiel_id]["punkte_result"] = erg
+        results.append({"user": uname, "tipp": f"{th}:{tg}", "erg": erg, "pts": pval})
     save_data()
-    return f"<pre style='background:#111;color:#0f0;padding:20px;font-size:14px;'>Auswertung {spiel_id} ({heim_tore}:{gast_tore}):\n" + "\n".join(auswertungen) + "\n\n✅ Gespeichert!</pre>"
+    return results
+
+@app.route('/adminpanel')
+def adminpanel():
+    if "username" not in session or session["username"] != ADMIN_USER:
+        return redirect(url_for('home'))
+    username = session["username"]
+    user_info = user_db.get(username, {"points": 1000, "tipps": {}, "lieblingsteam": None})
+    navbar = get_navbar(username, user_info["points"], user_info.get("lieblingsteam"), "adminpanel")
+
+    # Build the panel HTML
+    gruppen_html = ""
+    for gr_key, gr_data in WM_GRUPPEN.items():
+        spiele_html = ""
+        for spiel in gr_data["spiele"]:
+            sid = spiel["id"]
+            cache = live_scores_cache.get(sid, {})
+            status = cache.get("status", "upcoming")
+            heim_score = cache.get("heim")
+            gast_score = cache.get("gast")
+
+            # Count tipps for this game
+            tipps_fuer_spiel = {
+                u: d["tipps"][sid]
+                for u, d in user_db.items()
+                if sid in d.get("tipps", {})
+            }
+            n_tipps = len(tipps_fuer_spiel)
+
+            # Status indicator
+            if status == "live":
+                status_html = f'<div class="ap-status ap-s-live"><div class="ap-s-dot"></div> LÄUFT</div>'
+                card_cls = "status-live"
+            elif status == "final":
+                status_html = f'<div class="ap-status ap-s-final"><div class="ap-s-dot"></div> BEENDET</div>'
+                card_cls = "status-final"
+            else:
+                status_html = f'<div class="ap-status ap-s-upcoming"><div class="ap-s-dot"></div> AUSSTEHEND</div>'
+                card_cls = "status-upcoming"
+
+            # Result display if final
+            result_html = ""
+            if status == "final" and heim_score is not None:
+                result_html = f'<div class="ap-result-tag">{heim_score} : {gast_score}</div>'
+
+            # Tipps detail table
+            tipps_rows = ""
+            for uname, t in sorted(tipps_fuer_spiel.items()):
+                pr = t.get("punkte_result", "—")
+                pts_label = {"perfekt": "+1000 ◈ 🎯", "tendenz_tor": "+500 ◈ ⚡", "tendenz": "+200 ◈ ✅", "falsch": "0 ◈ ❌"}.get(pr, "–")
+                row_cls = pr if pr in ("perfekt","tendenz_tor","tendenz","falsch") else ""
+                tipps_rows += f"""
+                <tr class="ap-result-row {row_cls}">
+                  <td><strong>{uname}</strong></td>
+                  <td style="font-family:'Bebas Neue';font-size:16px;letter-spacing:1px;">{t['heim']}:{t['gast']}</td>
+                  <td style="color:var(--text2);">{pts_label}</td>
+                </tr>"""
+
+            tipps_panel = ""
+            if tipps_fuer_spiel:
+                tipps_panel = f"""
+                <button class="ap-expand-btn" onclick="toggleTipps('{sid}')">▾ {n_tipps} Tipp{'s' if n_tipps!=1 else ''} anzeigen</button>
+                <div class="ap-tipps-panel" id="tipps-{sid}">
+                  <table class="ap-tipps-table" style="margin-top:6px;">
+                    <tr><th>Spieler</th><th>Tipp</th><th>Ergebnis</th></tr>
+                    {tipps_rows}
+                  </table>
+                </div>"""
+            else:
+                tipps_panel = f'<span style="font-family:\'Rajdhani\';font-size:11px;color:var(--muted);">Noch keine Tipps</span>'
+
+            # Action buttons
+            action_html = f"""
+            <div class="ap-actions">
+              <div class="ap-btn-row">
+                <button class="ap-btn ap-btn-live {'active' if status=='live' else ''}"
+                  onclick="setStatus('{sid}','live',this)">
+                  🔴 LIVE setzen
+                </button>
+                <button class="ap-btn ap-btn-upcoming {'active' if status=='upcoming' else ''}"
+                  onclick="setStatus('{sid}','upcoming',this)">
+                  ⏸ Zurücksetzen
+                </button>
+              </div>
+              <div id="finish-form-{sid}" class="ap-finish-form {'hidden' if status != 'live' else ''}">
+                <span class="ap-finish-label">Abpfiff:</span>
+                <input type="number" id="h-{sid}" min="0" max="20" value="{heim_score if heim_score is not None else 0}" class="ap-score-in" placeholder="0">
+                <span class="ap-score-sep">:</span>
+                <input type="number" id="g-{sid}" min="0" max="20" value="{gast_score if gast_score is not None else 0}" class="ap-score-in" placeholder="0">
+                <button class="ap-finish-btn" onclick="finishGame('{sid}','{spiel['heim']}','{spiel['gast']}')">
+                  ✅ Abpfiff + Coins verteilen
+                </button>
+              </div>
+              {result_html}
+              {tipps_panel}
+            </div>"""
+
+            heim_code = TEAM_CODE.get(spiel["heim"], "")
+            gast_code = TEAM_CODE.get(spiel["gast"], "")
+            spiele_html += f"""
+            <div class="ap-match {card_cls}" id="ap-match-{sid}">
+              <div>
+                <div class="ap-match-teams">
+                  {flag_img(heim_code, 18)} {spiel['heim']}<br>
+                  {flag_img(gast_code, 18)} {spiel['gast']}
+                </div>
+                <div class="ap-match-meta">{spiel['datum']} · {spiel['uhrzeit']} Uhr</div>
+                <div class="ap-match-id">{sid}</div>
+              </div>
+              <div>
+                {status_html}
+              </div>
+              {action_html}
+            </div>"""
+
+        gruppen_html += f"""
+        <div class="ap-gruppe-header">
+          <div class="ap-gr-letter">{gr_key}</div>
+          <div>
+            <div class="ap-gr-label">Gruppe {gr_key}</div>
+            <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">
+              {''.join(f'<span style="font-family:\'Rajdhani\';font-weight:700;font-size:11px;color:var(--muted);background:var(--g3);border-radius:4px;padding:2px 8px;">{flag_img(t["code"],14)} {t["name"]}</span>' for t in gr_data["teams"])}
+            </div>
+          </div>
+        </div>
+        {spiele_html}"""
+
+    # Player overview
+    player_rows = ""
+    for uname, data in sorted(user_db.items(), key=lambda x: -x[1].get("points", 0)):
+        n = len(data.get("tipps", {}))
+        player_rows += f"""
+        <div style="display:flex;align-items:center;gap:12px;padding:9px 14px;
+             background:var(--g3);border-radius:8px;margin-bottom:6px;">
+          <img src="https://mc-heads.net/avatar/{uname}/28" style="width:28px;height:28px;border-radius:5px;image-rendering:pixelated;" onerror="this.style.display='none'">
+          <span style="font-family:'Rajdhani';font-weight:800;font-size:14px;flex:1;">{uname}</span>
+          <span style="font-family:'Bebas Neue';font-size:20px;color:var(--gold);letter-spacing:1px;">{data.get('points',0):,} ◈</span>
+          <span style="font-family:'Rajdhani';font-weight:700;font-size:12px;color:var(--muted);">{n} Tipps</span>
+        </div>"""
+
+    return BASE_HTML + ADMIN_CSS + f"""
+    {navbar}
+    <div id="ap-toast"></div>
+    <div class="ap-wrap">
+      <div class="ap-hero fade-in">
+        <div class="ap-hero-icon">🛠️</div>
+        <div>
+          <div class="ap-hero-title">Admin Panel</div>
+          <div class="ap-hero-sub">Nur für Lattenrost1234 · Live-Status & Auswertung</div>
+        </div>
+        <div style="margin-left:auto;text-align:right;">
+          <div style="font-family:'Bebas Neue';font-size:36px;letter-spacing:2px;color:var(--gold);">{len(user_db)}</div>
+          <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;">Registrierte Spieler</div>
+        </div>
+      </div>
+
+      <!-- Quick stats -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:32px;" class="fade-in d1">
+        <div class="card" style="text-align:center;padding:20px 14px;">
+          <div style="font-family:'Bebas Neue';font-size:44px;line-height:1;color:var(--live);">
+            {sum(1 for g in WM_GRUPPEN.values() for s in g['spiele'] if live_scores_cache.get(s['id'],{{}}).get('status')=='live')}
+          </div>
+          <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:3px;">🔴 Live jetzt</div>
+        </div>
+        <div class="card" style="text-align:center;padding:20px 14px;">
+          <div style="font-family:'Bebas Neue';font-size:44px;line-height:1;color:var(--neon);">
+            {sum(1 for g in WM_GRUPPEN.values() for s in g['spiele'] if live_scores_cache.get(s['id'],{{}}).get('status')=='final')}
+          </div>
+          <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:3px;">✅ Abgeschlossen</div>
+        </div>
+        <div class="card" style="text-align:center;padding:20px 14px;">
+          <div style="font-family:'Bebas Neue';font-size:44px;line-height:1;color:var(--sky);">
+            {sum(len(d.get('tipps',{{}})) for d in user_db.values())}
+          </div>
+          <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:3px;">⚽ Tipps gesamt</div>
+        </div>
+      </div>
+
+      <!-- Spiele -->
+      <div style="margin-bottom:10px;" class="fade-in d2">
+        <div class="sec-eyebrow">⚽ Spielverwaltung</div>
+        <div class="sec-title">Alle Spiele</div>
+        <div class="sec-sub">Status setzen · Ergebnis eintragen · Coins verteilen</div>
+      </div>
+      <div class="fade-in d3">{gruppen_html}</div>
+
+      <!-- Spielerliste -->
+      <div style="margin:40px 0 10px;" class="fade-in">
+        <div class="sec-eyebrow">👥 Spielerliste</div>
+        <div class="sec-title">Rangliste</div>
+      </div>
+      <div class="fade-in">{player_rows if player_rows else '<div style="color:var(--muted);font-family:\'Rajdhani\';padding:20px;">Noch keine Spieler registriert.</div>'}</div>
+    </div>
+
+    <script>
+    function showToast(msg, ok=true) {{
+      const t = document.getElementById('ap-toast');
+      t.textContent = msg;
+      t.style.borderColor = ok ? 'rgba(0,229,160,0.5)' : 'rgba(244,67,54,0.5)';
+      t.style.color = ok ? 'var(--neon)' : 'var(--live)';
+      t.style.display = 'block';
+      clearTimeout(t._to);
+      t._to = setTimeout(() => t.style.display = 'none', 3500);
+    }}
+
+    function setStatus(sid, newStatus, btn) {{
+      fetch('/api/admin/setstatus', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{spiel_id: sid, status: newStatus}})
+      }}).then(r => r.json()).then(d => {{
+        if(d.ok) {{
+          showToast(newStatus === 'live' ? '🔴 ' + sid + ' ist jetzt LIVE!' : '⏸ ' + sid + ' zurückgesetzt');
+          // Update card class
+          const card = document.getElementById('ap-match-' + sid);
+          card.className = 'ap-match status-' + (newStatus === 'upcoming' ? 'upcoming' : 'live');
+          // Show/hide finish form
+          const ff = document.getElementById('finish-form-' + sid);
+          if(ff) ff.classList.toggle('hidden', newStatus !== 'live');
+          // Update button active states
+          card.querySelectorAll('.ap-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        }} else {{
+          showToast('❌ Fehler: ' + (d.error || 'Unbekannt'), false);
+        }}
+      }}).catch(() => showToast('❌ Netzwerkfehler', false));
+    }}
+
+    function finishGame(sid, heim, gast) {{
+      const h = parseInt(document.getElementById('h-' + sid).value) || 0;
+      const g = parseInt(document.getElementById('g-' + sid).value) || 0;
+      if(!confirm('Spiel ' + sid + ' (' + heim + ' ' + h + ':' + g + ' ' + gast + ') abschließen und Coins verteilen?')) return;
+      fetch('/api/admin/finish', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{spiel_id: sid, heim: h, gast: g}})
+      }}).then(r => r.json()).then(d => {{
+        if(d.ok) {{
+          showToast('✅ ' + sid + ' abgeschlossen! ' + d.count + ' Tipps ausgewertet.');
+          const card = document.getElementById('ap-match-' + sid);
+          card.className = 'ap-match status-final';
+          const ff = document.getElementById('finish-form-' + sid);
+          if(ff) ff.classList.add('hidden');
+          // Show result
+          setTimeout(() => location.reload(), 1800);
+        }} else {{
+          showToast('❌ Fehler: ' + (d.error || 'Unbekannt'), false);
+        }}
+      }}).catch(() => showToast('❌ Netzwerkfehler', false));
+    }}
+
+    function toggleTipps(sid) {{
+      const panel = document.getElementById('tipps-' + sid);
+      panel.classList.toggle('open');
+    }}
+    </script>
+    </body></html>"""
+
+# ── API: Admin set status (live / upcoming) ──────────────────────
+@app.route('/api/admin/setstatus', methods=['POST'])
+def api_admin_setstatus():
+    if "username" not in session or session["username"] != ADMIN_USER:
+        return jsonify({"ok": False, "error": "Kein Zugriff"}), 403
+    data = request.get_json()
+    sid = data.get("spiel_id", "")
+    new_status = data.get("status", "upcoming")
+    if new_status not in ("live", "upcoming", "final"):
+        return jsonify({"ok": False, "error": "Ungültiger Status"})
+
+    # Find the spiel
+    spiel = None
+    for gd in WM_GRUPPEN.values():
+        for sp in gd["spiele"]:
+            if sp["id"] == sid:
+                spiel = sp; break
+
+    if not spiel:
+        return jsonify({"ok": False, "error": "Spiel nicht gefunden"})
+
+    # Update cache
+    if sid not in live_scores_cache:
+        live_scores_cache[sid] = {"status": "upcoming", "heim": None, "gast": None, "minuto": None}
+
+    live_scores_cache[sid]["status"] = new_status
+    if new_status == "upcoming":
+        live_scores_cache[sid]["heim"] = None
+        live_scores_cache[sid]["gast"] = None
+
+    # Persist cache
+    try:
+        with open(LIVESCORES_CACHE_FILE, 'w') as f:
+            json.dump(live_scores_cache, f)
+    except Exception as e:
+        print(f"[WARN] Cache nicht gespeichert: {e}")
+
+    print(f"[ADMIN] {sid} → {new_status}")
+    return jsonify({"ok": True})
+
+# ── API: Admin finish game + award coins ─────────────────────────
+@app.route('/api/admin/finish', methods=['POST'])
+def api_admin_finish():
+    if "username" not in session or session["username"] != ADMIN_USER:
+        return jsonify({"ok": False, "error": "Kein Zugriff"}), 403
+    data = request.get_json()
+    sid = data.get("spiel_id", "")
+    heim_tore = int(data.get("heim", 0))
+    gast_tore = int(data.get("gast", 0))
+
+    # Update cache to final with score
+    if sid not in live_scores_cache:
+        live_scores_cache[sid] = {}
+    live_scores_cache[sid]["status"] = "final"
+    live_scores_cache[sid]["heim"] = heim_tore
+    live_scores_cache[sid]["gast"] = gast_tore
+
+    try:
+        with open(LIVESCORES_CACHE_FILE, 'w') as f:
+            json.dump(live_scores_cache, f)
+    except Exception as e:
+        print(f"[WARN] Cache nicht gespeichert: {e}")
+
+    # Auswertung
+    results = do_auswertung(sid, heim_tore, gast_tore)
+    print(f"[ADMIN] Abpfiff {sid} {heim_tore}:{gast_tore} — {len(results)} Tipps ausgewertet")
+    for r in results:
+        print(f"  → {r['user']}: {r['tipp']} = {r['erg']} (+{r['pts']})")
+
+    return jsonify({"ok": True, "count": len(results), "results": results})
+
+# Legacy URL compat
+@app.route('/auswertung')
+def auswertung():
+    if "username" not in session or session["username"] != ADMIN_USER:
+        return redirect(url_for('adminpanel'))
+    return redirect(url_for('adminpanel'))
 
 @app.route('/admin')
-def admin():
-    key = request.args.get("key", "")
-    if key != "ADMIN1337":
-        return "Kein Zugriff", 403
-    output = f"<pre style='background:#111;color:#0f0;padding:20px;'>WM 2026 Admin – {len(user_db)} Spieler\n\n"
-    for uname, data in sorted(user_db.items(), key=lambda x: -x[1].get("points", 0)):
-        output += f"{uname}: {data.get('points',0)} ◈  {len(data.get('tipps',{}))} Tipps\n"
-    output += "</pre>"
-    return output
+def admin_old():
+    if "username" not in session or session["username"] != ADMIN_USER:
+        return redirect(url_for('home'))
+    return redirect(url_for('adminpanel'))
 
 @app.route('/logout')
 def logout():
