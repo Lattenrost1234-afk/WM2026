@@ -1545,7 +1545,7 @@ def register():
             <div style="font-family:'Rajdhani';font-weight:800;font-size:13px;letter-spacing:2px;color:var(--copper);margin-bottom:12px;text-transform:uppercase;">📋 So geht's:</div>
             <div>1. Logge dich auf <strong style="color:var(--text);">GrieferGames</strong> ein</div>
             <div>2. Schreibe diese Nachricht im Chat:</div>
-            <div style="margin:10px 0 0 14px;"><code>/msg Lattenrost1234 #verifyWM {code}</code></div>
+            <div style="margin:10px 0 0 14px;"><code>/msg HostCasino #verifyWM {code}</code></div>
             <div style="margin-top:14px;color:var(--muted);font-size:12px;font-family:'Rajdhani';font-weight:600;">
               ⚡ Lass dieses Fenster offen – das System erkennt die Nachricht automatisch.
             </div>
