@@ -228,6 +228,14 @@ def flag_img(code, size=32):
         code_lower = special[code_lower]
     return f'<img src="https://flagcdn.com/h{size}/{code_lower}.png" width="{size}" height="{int(size*0.667)}" style="border-radius:3px;vertical-align:middle;object-fit:cover;" alt="" onerror="this.style.display=\'none\'">'
 
+def flag_url(code):
+    """Gibt nur die URL zurück für CSS background-image."""
+    code_lower = code.lower()
+    special = {"sco": "gb-sct", "eng": "gb-eng", "wal": "gb-wls"}
+    if code_lower in special:
+        code_lower = special[code_lower]
+    return f"https://flagcdn.com/h120/{code_lower}.png"
+
 # ==========================================
 # WM 2026 GRUPPEN & SPIELE
 # ==========================================
@@ -480,6 +488,25 @@ def minuten_bis_spiel(spiel):
     jetzt = datetime.datetime.now()
     return int((dt - jetzt).total_seconds() / 60)
 
+def get_day_label(spiel):
+    """
+    Gibt ein Tuple (label, css_class) zurück:
+    - ("HEUTE", "day-today") wenn das Spiel heute ist
+    - ("MORGEN", "day-tomorrow") wenn das Spiel morgen ist
+    - (None, None) sonst
+    """
+    try:
+        spiel_dt = datetime.datetime.strptime(spiel["datum"], "%d.%m.%Y").date()
+    except:
+        return None, None
+    heute = datetime.date.today()
+    morgen = heute + datetime.timedelta(days=1)
+    if spiel_dt == heute:
+        return "HEUTE", "day-today"
+    elif spiel_dt == morgen:
+        return "MORGEN", "day-tomorrow"
+    return None, None
+
 # ==========================================
 # LEADERBOARD
 # ==========================================
@@ -599,7 +626,6 @@ body{
   overflow-x:hidden;
 }
 
-/* ── ANIMATED BG FIELD ── */
 body::before{
   content:'';
   position:fixed;inset:0;z-index:0;
@@ -612,12 +638,8 @@ body::before{
   pointer-events:none;
   animation:bgPulse 12s ease-in-out infinite;
 }
-@keyframes bgPulse{
-  0%,100%{opacity:1}
-  50%{opacity:0.7}
-}
+@keyframes bgPulse{0%,100%{opacity:1}50%{opacity:0.7}}
 
-/* ── FLOATING ORBS ── */
 body::after{
   content:'';
   position:fixed;
@@ -629,11 +651,7 @@ body::after{
   animation:orbFloat 20s ease-in-out infinite;
   z-index:0;
 }
-@keyframes orbFloat{
-  0%,100%{transform:translate(0,0) scale(1)}
-  33%{transform:translate(-60px,40px) scale(1.1)}
-  66%{transform:translate(30px,-50px) scale(0.9)}
-}
+@keyframes orbFloat{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-60px,40px) scale(1.1)}66%{transform:translate(30px,-50px) scale(0.9)}}
 
 /* ── NAVBAR ── */
 .navbar{
@@ -650,10 +668,7 @@ body::after{
   background:linear-gradient(90deg,transparent,rgba(245,200,66,0.4),transparent);
   animation:scanline 6s linear infinite;
 }
-@keyframes scanline{
-  0%{background-position:0% 0%}
-  100%{background-position:200% 0%}
-}
+@keyframes scanline{0%{background-position:0% 0%}100%{background-position:200% 0%}}
 .nb-logo-wrap{display:flex;align-items:center;gap:12px;flex-shrink:0;}
 .nb-icon{
   width:34px;height:34px;
@@ -744,20 +759,7 @@ body::after{
   animation:titleShimmer 4s ease-in-out infinite;
   background-size:200% 200%;
 }
-@keyframes titleShimmer{
-  0%{background-position:0% 50%}
-  50%{background-position:100% 50%}
-  100%{background-position:0% 50%}
-}
-.hero-h1-shadow{
-  position:absolute;inset:0;
-  font-family:'Bebas Neue';
-  font-size:clamp(70px,14vw,160px);line-height:.85;
-  letter-spacing:4px;
-  color:transparent;
-  -webkit-text-stroke:1px rgba(245,200,66,0.08);
-  filter:blur(24px);z-index:0;
-}
+@keyframes titleShimmer{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
 .hero-sub{
   color:var(--text2);font-size:16px;font-weight:400;
   max-width:440px;margin:0 auto 48px;line-height:1.9;
@@ -823,9 +825,7 @@ body::after{
   color:var(--copper);background:rgba(224,123,57,0.09);border:1px solid rgba(224,123,57,0.25);
   padding:4px 12px;border-radius:4px;margin-bottom:8px;
 }
-.sec-title{
-  font-family:'Bebas Neue';font-size:36px;letter-spacing:2px;color:var(--text);
-}
+.sec-title{font-family:'Bebas Neue';font-size:36px;letter-spacing:2px;color:var(--text);}
 .sec-sub{color:var(--muted);font-size:13px;margin-top:3px;font-weight:500;}
 
 /* ── TABS ── */
@@ -846,11 +846,31 @@ body::after{
   box-shadow:0 0 12px rgba(245,200,66,0.08);
 }
 
+/* ── DAY LABELS ── */
+.day-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:'Rajdhani';font-weight:800;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;
+  padding:3px 10px;border-radius:100px;
+}
+.day-today{
+  background:rgba(255,87,34,0.25);
+  border:1px solid rgba(255,87,34,0.6);
+  color:#ff8a65;
+  animation:todayPulse 2s ease-in-out infinite;
+  box-shadow:0 0 10px rgba(255,87,34,0.2);
+}
+@keyframes todayPulse{0%,100%{box-shadow:0 0 8px rgba(255,87,34,0.2)}50%{box-shadow:0 0 20px rgba(255,87,34,0.45)}}
+.day-tomorrow{
+  background:rgba(224,123,57,0.18);
+  border:1px solid rgba(224,123,57,0.45);
+  color:var(--copper);
+}
+
 /* ── MATCH CARDS ── */
 .match-list{display:flex;flex-direction:column;gap:8px;}
 .match-card{
   display:grid;
-  grid-template-columns:1fr 180px 1fr 250px;
+  grid-template-columns:1fr 200px 1fr 260px;
   align-items:center;
   background:var(--card2);
   border:1px solid var(--border3);
@@ -863,20 +883,36 @@ body::after{
   box-shadow:0 8px 30px rgba(0,0,0,0.5);
   background:linear-gradient(90deg,rgba(22,31,53,0.8),var(--card2));
 }
+
+/* Past games: grayed out */
+.match-card.is-final{
+  opacity:0.38;
+  filter:saturate(0.3);
+}
+.match-card.is-final:hover{
+  opacity:0.65;
+  filter:saturate(0.5);
+  transform:none;
+}
+
+.match-card.is-today{
+  border-color:rgba(255,87,34,0.25);
+  background:linear-gradient(90deg,rgba(255,87,34,0.05),var(--card2) 50%);
+}
+.match-card.is-live{
+  background:linear-gradient(90deg,rgba(244,67,54,0.09),var(--card2) 50%);
+  border-color:rgba(244,67,54,0.3);
+}
+.match-card.is-tipped{border-color:rgba(0,229,160,0.18);}
+
 .mc-accent{position:absolute;left:0;top:0;bottom:0;width:3px;}
 .acc-upcoming{background:linear-gradient(180deg,var(--sky),rgba(41,182,246,0.3));}
 .acc-soon{background:linear-gradient(180deg,var(--copper),var(--fire));}
 .acc-live{background:var(--live);animation:accPulse 1s ease-in-out infinite;}
-.acc-final{background:rgba(61,79,110,0.5);}
+.acc-final{background:rgba(61,79,110,0.3);}
 .acc-tipped{background:linear-gradient(180deg,var(--neon),rgba(0,229,160,0.3));}
+.acc-today{background:linear-gradient(180deg,var(--fire2),var(--copper));}
 @keyframes accPulse{0%,100%{opacity:1}50%{opacity:0.2}}
-.match-card.is-live{
-  background:linear-gradient(90deg,rgba(244,67,54,0.07),var(--card2) 50%);
-  border-color:rgba(244,67,54,0.25);
-}
-.match-card.is-final{opacity:.65;}
-.match-card.is-final:hover{opacity:1;}
-.match-card.is-tipped{border-color:rgba(0,229,160,0.18);}
 
 .mc-home,.mc-away{
   padding:14px 18px 14px 22px;
@@ -891,7 +927,7 @@ body::after{
 
 .mc-mid{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:10px 4px;gap:5px;
+  padding:10px 4px;gap:4px;
 }
 .mc-score-row{display:flex;align-items:center;gap:5px;}
 .mc-num{
@@ -918,6 +954,11 @@ body::after{
 }
 @keyframes dotBlink{0%,100%{opacity:1}50%{opacity:0}}
 
+/* Big time display for today's games */
+.mc-time-today{
+  font-family:'Bebas Neue';font-size:28px;color:#ff8a65;letter-spacing:3px;line-height:1;
+  text-shadow:0 0 16px rgba(255,87,34,0.4);
+}
 .mc-time{font-family:'Bebas Neue';font-size:20px;color:var(--text2);letter-spacing:2px;}
 .mc-date{font-family:'Rajdhani';font-size:10px;font-weight:700;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;}
 .mc-vs{font-family:'Bebas Neue';font-size:14px;letter-spacing:3px;color:var(--muted);}
@@ -976,6 +1017,19 @@ body::after{
 .lb-items{display:flex;gap:24px;overflow:hidden;flex:1;}
 .lb-item{font-family:'Rajdhani';font-weight:700;font-size:14px;white-space:nowrap;color:var(--text2);}
 .lb-score{color:var(--live2);font-family:'Bebas Neue';font-size:17px;letter-spacing:1px;}
+
+/* ── TODAY BANNER ── */
+.today-banner{
+  background:linear-gradient(90deg,rgba(255,87,34,0.1),rgba(255,87,34,0.02));
+  border:1px solid rgba(255,87,34,0.3);border-radius:10px;
+  padding:10px 18px;margin-bottom:14px;
+  display:flex;align-items:center;gap:12px;
+}
+.today-banner-icon{font-size:20px;}
+.today-banner-text{font-family:'Rajdhani';font-weight:700;font-size:14px;color:#ff8a65;letter-spacing:.5px;}
+.today-banner-count{
+  margin-left:auto;font-family:'Bebas Neue';font-size:22px;letter-spacing:2px;color:var(--copper);
+}
 
 /* ── GRUPPE HEADER ── */
 .gruppe-header{
@@ -1103,25 +1157,14 @@ body::after{
 /* Podium */
 .podium-wrap{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:32px;}
 .podium-card{border-radius:12px;padding:22px 14px;text-align:center;position:relative;overflow:hidden;border:1px solid;}
-.po-1{
-  background:linear-gradient(160deg,rgba(245,200,66,0.14),rgba(224,123,57,0.06));
-  border-color:rgba(245,200,66,0.38);order:1;
-}
-.po-1::before{
-  content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,transparent,var(--gold3),transparent);
-}
+.po-1{background:linear-gradient(160deg,rgba(245,200,66,0.14),rgba(224,123,57,0.06));border-color:rgba(245,200,66,0.38);order:1;}
+.po-1::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold3),transparent);}
 .po-2{background:rgba(184,204,224,0.04);border-color:rgba(184,204,224,0.2);order:0;margin-top:24px;}
 .po-3{background:rgba(205,139,74,0.06);border-color:rgba(205,139,74,0.2);order:2;margin-top:38px;}
 .po-medal{font-size:38px;margin-bottom:10px;}
 .po-head{width:56px;height:56px;border-radius:8px;image-rendering:pixelated;border:2px solid rgba(245,200,66,0.3);margin:0 auto 10px;}
 .po-name{font-family:'Bebas Neue';font-size:20px;letter-spacing:2px;}
-.po-pts{
-  font-family:'Bebas Neue';font-size:30px;letter-spacing:1px;
-  background:linear-gradient(135deg,var(--gold3),var(--copper));
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  margin-top:6px;
-}
+.po-pts{font-family:'Bebas Neue';font-size:30px;letter-spacing:1px;background:linear-gradient(135deg,var(--gold3),var(--copper));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-top:6px;}
 
 /* ── PUNKTE PAGE ── */
 .pts-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;}
@@ -1132,11 +1175,7 @@ body::after{
 .pts-row.top{border-color:rgba(0,229,160,0.3);background:rgba(0,229,160,0.04);}
 .pts-label{font-weight:700;font-size:14px;}
 .pts-sub{font-size:12px;color:var(--muted);margin-top:2px;font-weight:500;}
-.pts-val{
-  font-family:'Bebas Neue';font-size:28px;letter-spacing:1px;
-  background:linear-gradient(135deg,var(--gold3),var(--copper));
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;
-}
+.pts-val{font-family:'Bebas Neue';font-size:28px;letter-spacing:1px;background:linear-gradient(135deg,var(--gold3),var(--copper));-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;}
 .pts-val.neg{background:linear-gradient(135deg,var(--fire2),var(--fire));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
 
 /* ── REGISTER ── */
@@ -1146,10 +1185,7 @@ body::after{
   background:rgba(0,229,160,0.05);border:2px solid rgba(0,229,160,0.28);border-radius:12px;
   margin:22px 0;animation:codeGlow 2s ease-in-out infinite;
 }
-@keyframes codeGlow{
-  0%,100%{text-shadow:0 0 20px rgba(0,229,160,0.4)}
-  50%{text-shadow:0 0 50px rgba(0,229,160,0.9),0 0 80px rgba(0,229,160,0.3)}
-}
+@keyframes codeGlow{0%,100%{text-shadow:0 0 20px rgba(0,229,160,0.4)}50%{text-shadow:0 0 50px rgba(0,229,160,0.9),0 0 80px rgba(0,229,160,0.3)}}
 .step-card{background:var(--g3);border:1px solid var(--border2);border-radius:10px;padding:18px;line-height:2.4;font-size:14px;}
 .step-card code{background:rgba(41,182,246,0.12);color:var(--sky);border:1px solid rgba(41,182,246,0.25);border-radius:5px;padding:2px 10px;font-size:12px;font-family:'Courier New',monospace;}
 .spinner{width:36px;height:36px;margin:14px auto;border:3px solid rgba(255,255,255,0.07);border-top-color:var(--neon);border-radius:50%;animation:spin .8s linear infinite;}
@@ -1161,25 +1197,69 @@ body::after{
 .prog-anim-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--neon2),var(--neon));animation:prog 60s linear forwards;border-radius:2px;}
 @keyframes prog{to{width:100%}}
 
-/* ── TEAM CHOOSER ── */
-.team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:10px;}
+/* ── TEAM CHOOSER — FLAG CARDS ── */
+.team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:12px;}
+
 .team-btn{
   position:relative;overflow:hidden;
-  background:linear-gradient(160deg,var(--c1),var(--c2));
-  border:1px solid rgba(255,255,255,0.09);border-radius:11px;
-  padding:0;cursor:pointer;min-height:128px;
+  border:1px solid rgba(255,255,255,0.1);border-radius:11px;
+  padding:0;cursor:pointer;min-height:140px;
   display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
-  font-family:inherit;transition:transform .2s ease,box-shadow .2s ease;
-  box-shadow:0 4px 20px rgba(0,0,0,0.55);
+  font-family:inherit;transition:transform .2s ease,box-shadow .2s ease,border-color .2s;
+  box-shadow:0 4px 20px rgba(0,0,0,0.6);
+  background:#0a0e1a;
 }
+
+/* Flag fills the entire card background */
+.team-btn-flag-bg{
+  position:absolute;inset:0;
+  background-size:cover;background-position:center;background-repeat:no-repeat;
+  transition:transform .3s ease,filter .3s ease;
+  filter:brightness(0.55) saturate(1.1);
+}
+.team-btn:hover .team-btn-flag-bg{
+  transform:scale(1.08);
+  filter:brightness(0.75) saturate(1.3);
+}
+
+/* Bottom gradient for text readability */
+.team-btn-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,
+    transparent 0%,
+    transparent 40%,
+    rgba(0,0,0,0.45) 70%,
+    rgba(0,0,0,0.88) 100%
+  );
+  z-index:1;
+}
+
+/* Subtle gold border glow on hover */
 .team-btn:hover{
   transform:translateY(-6px) scale(1.04);
-  box-shadow:0 14px 36px rgba(0,0,0,0.75),0 0 0 2px rgba(245,200,66,0.55);
+  box-shadow:0 16px 40px rgba(0,0,0,0.8),0 0 0 2px rgba(245,200,66,0.5);
+  border-color:rgba(245,200,66,0.4);
 }
-.team-btn-overlay{position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,rgba(0,0,0,0.7) 100%);z-index:1;}
-.team-btn-flag{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:66px;height:44px;object-fit:cover;border-radius:4px;box-shadow:0 3px 14px rgba(0,0,0,0.6);z-index:2;}
-.team-btn-name{position:relative;z-index:3;color:#fff;font-family:'Rajdhani';font-weight:800;font-size:13px;letter-spacing:.5px;text-transform:uppercase;text-shadow:0 1px 8px rgba(0,0,0,0.9);padding:0 10px;text-align:center;line-height:1.2;margin-top:68px;}
-.team-btn-group{position:relative;z-index:3;color:rgba(255,255,255,0.5);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding-bottom:10px;margin-top:2px;}
+
+.team-btn-group-badge{
+  position:absolute;top:10px;right:10px;z-index:3;
+  font-family:'Bebas Neue';font-size:13px;letter-spacing:2px;
+  background:rgba(0,0,0,0.6);
+  color:rgba(255,255,255,0.7);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:5px;padding:2px 8px;
+  backdrop-filter:blur(4px);
+}
+
+.team-btn-name{
+  position:relative;z-index:3;
+  color:#fff;
+  font-family:'Rajdhani';font-weight:800;font-size:14px;
+  letter-spacing:.5px;text-transform:uppercase;
+  text-shadow:0 1px 10px rgba(0,0,0,1),0 0 20px rgba(0,0,0,0.8);
+  padding:0 10px;text-align:center;line-height:1.2;
+  margin-bottom:12px;
+}
 
 /* ── ENTER ANIMATIONS ── */
 .fade-in{opacity:0;transform:translateY(16px);animation:fadeIn .45s ease forwards;}
@@ -1198,7 +1278,7 @@ body::after{
 
 /* ── RESPONSIVE ── */
 @media(max-width:1000px){
-  .match-card{grid-template-columns:1fr 150px 1fr;}
+  .match-card{grid-template-columns:1fr 160px 1fr;}
   .match-card .mc-action{display:none;}
 }
 @media(max-width:700px){
@@ -1284,7 +1364,6 @@ HOME_HTML = BASE_HTML + """
   </div>
 
   <div id="features" class="wrap" style="padding-bottom:100px;max-width:960px;">
-    <!-- Stat Highlights -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;">
       <div class="card fade-in d1" style="border-color:rgba(0,229,160,0.14);text-align:center;padding:32px 16px;">
         <div style="font-size:44px;margin-bottom:10px;">🌍</div>
@@ -1303,7 +1382,6 @@ HOME_HTML = BASE_HTML + """
       </div>
     </div>
 
-    <!-- Punkte Vorschau -->
     <div class="card fade-in d4" style="border-color:rgba(245,200,66,0.14);padding:28px 32px;">
       <div style="font-family:'Bebas Neue';font-size:18px;letter-spacing:4px;color:var(--muted);margin-bottom:20px;text-align:center;">PUNKTESYSTEM ÜBERSICHT</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center;">
@@ -1333,7 +1411,6 @@ const cv = document.getElementById('pcanvas');
 const cx = cv.getContext('2d');
 cv.width = window.innerWidth; cv.height = window.innerHeight;
 window.addEventListener('resize',()=>{cv.width=window.innerWidth;cv.height=window.innerHeight;});
-
 const EMOJIS=['⚽','🏆','⭐','🔥','🌍'];
 const pts=Array.from({length:22},()=>({
   x:Math.random()*cv.width, y:Math.random()*cv.height,
@@ -1342,7 +1419,6 @@ const pts=Array.from({length:22},()=>({
   e:EMOJIS[Math.floor(Math.random()*EMOJIS.length)],
   r:Math.random()*Math.PI*2, rs:(Math.random()-.5)*.012
 }));
-
 (function anim(){
   cx.clearRect(0,0,cv.width,cv.height);
   pts.forEach(p=>{
@@ -1475,41 +1551,25 @@ def choose_team():
             save_data()
         return redirect(url_for('dashboard'))
 
-    TEAM_COLORS = {
-        "Mexiko":("1a7c3e","d52b1e"),"Südkorea":("cd2e3a","003478"),"Südafrika":("007749","ffb612"),
-        "Tschechien":("d7141a","11457e"),"Schweiz":("cc0000","880000"),"Kanada":("cc0000","8b0000"),
-        "Katar":("8d1b3d","4a0e22"),"Bosnien":("002395","fcd116"),"Brasilien":("009c3b","fedf00"),
-        "Marokko":("c1272d","006233"),"Schottland":("003580","1a5fa8"),"Haiti":("00209f","d21034"),
-        "USA":("b22234","3c3b6e"),"Paraguay":("d52b1e","009ada"),"Australien":("00843d","ffcd00"),
-        "Türkei":("e30a17","a00808"),"Deutschland":("111111","dd0000"),"Elfenbeinküste":("f77f00","009a44"),
-        "Ecuador":("ffd100","0072ce"),"Ungarn":("ce2939","477050"),"Niederlande":("ff5500","cc3300"),
-        "Japan":("bc002d","7a001d"),"Tunesien":("cc0000","880000"),"Schweden":("006aa7","004f80"),
-        "Belgien":("111111","ef3340"),"Ägypten":("ce1126","8a0a1a"),"Iran":("239f40","157a2e"),
-        "Neuseeland":("00247d","8b0000"),"Spanien":("aa151b","780f12"),"Uruguay":("5aaee3","2a7ab5"),
-        "Saudi-Arabien":("006c35","004a24"),"Kap Verde":("003893","8b1a1a"),"Frankreich":("002395","00175e"),
-        "Senegal":("00853f","005529"),"Norwegen":("ef2b2d","002868"),"Kroatien":("cc0000","001a99"),
-        "England":("cf142b","8b0d1c"),"Kolumbien":("fcd116","b8960f"),"Serbien":("c6363c","0c4076"),
-        "Venezuela":("cf142b","003087"),"Portugal":("006600","cc0000"),"Argentinien":("74acdf","4a8cca"),
-        "Chile":("d52b1e","003087"),"Albanien":("c80000","800000"),"Italien":("009246","ce2b37"),
-        "Kamerun":("007a5e","ce1126"),"Nigeria":("008751","005535"),"Österreich":("cc0000","880000"),
-    }
-
     groups_html = ""
     for gruppe_key, gruppe_data in WM_GRUPPEN.items():
         teams_html = ""
         for team in gruppe_data["teams"]:
             code = team['code']
+            # Get the correct flagcdn code
             special_map = {"sco": "gb-sct", "eng": "gb-eng"}
             flag_code = special_map.get(code, code)
-            flag_src = f"https://flagcdn.com/h56/{flag_code}.png"
-            c1, c2 = TEAM_COLORS.get(team['name'], ("1a2a4a", "2d4a8a"))
+            # Use a larger flag image as background (h120 for quality)
+            bg_url = f"https://flagcdn.com/h120/{flag_code}.png"
+
             teams_html += f"""
-            <button type="submit" name="team" value="{team['name']}" class="team-btn" style="--c1:#{c1};--c2:#{c2};">
+            <button type="submit" name="team" value="{team['name']}" class="team-btn">
+              <div class="team-btn-flag-bg" style="background-image:url('{bg_url}');"></div>
               <div class="team-btn-overlay"></div>
-              <img class="team-btn-flag" src="{flag_src}" alt="{team['name']}" onerror="this.style.opacity='0'">
+              <span class="team-btn-group-badge">GR. {gruppe_key}</span>
               <span class="team-btn-name">{team['name']}</span>
-              <span class="team-btn-group">Gr. {gruppe_key}</span>
             </button>"""
+
         groups_html += f"""
         <div style="margin-bottom:30px;" class="fade-in">
           <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
@@ -1583,6 +1643,22 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
           <div class="lb-items">{items}</div>
         </div>"""
 
+    # Today's games in this group
+    heute = datetime.date.today()
+    heute_spiele_count = sum(
+        1 for sp in gruppe_data["spiele"]
+        if datetime.datetime.strptime(sp["datum"], "%d.%m.%Y").date() == heute
+    )
+
+    today_banner = ""
+    if heute_spiele_count > 0 and not laufende:
+        today_banner = f"""
+        <div class="today-banner fade-in">
+          <span class="today-banner-icon">🗓️</span>
+          <span class="today-banner-text">Heute spielen <strong>{heute_spiele_count} Team{'s' if heute_spiele_count > 1 else ''}</strong> in dieser Gruppe!</span>
+          <span class="today-banner-count">{heute.strftime('%d.%m.')}</span>
+        </div>"""
+
     # Match Cards
     spiele_html = ""
     for i, spiel in enumerate(gruppe_data["spiele"]):
@@ -1596,17 +1672,36 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         heim_code = TEAM_CODE.get(spiel["heim"], "")
         gast_code = TEAM_CODE.get(spiel["gast"], "")
 
+        # Determine if this game is today or tomorrow
+        day_label, day_css = get_day_label(spiel)
+
         card_extra = ""
-        if status == "live": card_extra = "is-live"
-        elif status == "final": card_extra = "is-final"
-        elif tipp: card_extra = "is-tipped"
+        acc_cls = "acc-upcoming"
 
-        acc_cls = f"acc-{status}" if status in ("live","final","upcoming","soon") else ("acc-tipped" if tipp else "acc-upcoming")
+        if status == "live":
+            card_extra = "is-live"
+            acc_cls = "acc-live"
+        elif status == "final":
+            card_extra = "is-final"
+            acc_cls = "acc-final"
+        elif status == "soon":
+            card_extra = "is-today"
+            acc_cls = "acc-soon"
+        elif day_label == "HEUTE":
+            card_extra = "is-today"
+            acc_cls = "acc-today"
+        elif tipp:
+            card_extra = "is-tipped"
+            acc_cls = "acc-tipped"
+        else:
+            acc_cls = "acc-upcoming"
 
-        # Center block
-        if status in ("live","final") and live_score and live_score.get("heim") is not None:
+        # Center block — time display
+        if status in ("live", "final") and live_score and live_score.get("heim") is not None:
             num_cls = "num-live" if status == "live" else "num-final"
-            chip = f'<div class="status-badge sb-live"><div class="dot-blink"></div> LIVE</div>' if status=="live" else f'<div class="status-badge sb-final">ABPFIFF</div>'
+            chip = (f'<div class="status-badge sb-live"><div class="dot-blink"></div> LIVE</div>'
+                    if status == "live" else
+                    f'<div class="status-badge sb-final">ABPFIFF</div>')
             center_html = f"""
             <div class="mc-mid">
               {chip}
@@ -1616,14 +1711,30 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
                 <span class="mc-num {num_cls}">{live_score["gast"]}</span>
               </div>
             </div>"""
-        elif status in ("live","final"):
-            chip = f'<div class="status-badge sb-live"><div class="dot-blink"></div> LIVE</div>' if status=="live" else f'<div class="status-badge sb-final">ABPFIFF</div>'
+        elif status in ("live", "final"):
+            chip = (f'<div class="status-badge sb-live"><div class="dot-blink"></div> LIVE</div>'
+                    if status == "live" else
+                    f'<div class="status-badge sb-final">ABPFIFF</div>')
             center_html = f'<div class="mc-mid">{chip}<div class="mc-vs">?:?</div></div>'
         elif status == "soon":
+            # Game starting soon (within 30 min)
             center_html = f"""<div class="mc-mid">
               <div class="status-badge sb-soon">⚡ BALD</div>
+              <div class="mc-time-today">{spiel['uhrzeit']}</div>
+              <div class="day-badge day-today"><div class="dot-blink"></div> HEUTE</div>
+            </div>"""
+        elif day_label == "HEUTE":
+            # Today's game, not yet starting
+            center_html = f"""<div class="mc-mid">
+              <div class="day-badge day-today">🔥 HEUTE</div>
+              <div class="mc-time-today">{spiel['uhrzeit']}</div>
+              <div class="mc-vs">VS</div>
+            </div>"""
+        elif day_label == "MORGEN":
+            center_html = f"""<div class="mc-mid">
+              <div class="day-badge day-tomorrow">📅 MORGEN</div>
               <div class="mc-time">{spiel['uhrzeit']}</div>
-              <div class="mc-date">{spiel['datum']}</div>
+              <div class="mc-vs">VS</div>
             </div>"""
         else:
             center_html = f"""<div class="mc-mid">
@@ -1634,7 +1745,7 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
 
         # Action block
         if tipp:
-            td = tipp if isinstance(tipp, dict) else {"heim":"?","gast":"?"}
+            td = tipp if isinstance(tipp, dict) else {"heim": "?", "gast": "?"}
             punkte_key = tipp.get("punkte_result") if isinstance(tipp, dict) else None
             eval_html = ""
             if status == "final" and live_score and live_score.get("heim") is not None:
@@ -1658,11 +1769,15 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         elif status == "live":
             action_html = '<div class="mc-action"><div class="badge-locked">🔴 Läuft gerade</div></div>'
         elif status == "final":
-            action_html = '<div class="mc-action"><div class="badge-missed">— Kein Tipp abgegeben</div></div>'
+            action_html = '<div class="mc-action"><div class="badge-missed">— Kein Tipp</div></div>'
         elif not erlaubt:
             action_html = '<div class="mc-action"><div class="badge-locked">🔒 Gesperrt</div></div>'
         else:
-            btn_label = f"Jetzt! (−50◈)" if min_bis <= 60 else "Tippen (−50◈)"
+            btn_label = "Tippen (−50◈)"
+            if status == "soon":
+                btn_label = "⚡ Jetzt! (−50◈)"
+            elif day_label == "HEUTE":
+                btn_label = "🔥 Heute (−50◈)"
             warn_html = f'<div class="badge-warn">⚠️ Noch {max(0,min_bis)} Min!</div>' if status == "soon" else ""
             action_html = f"""
             <div class="mc-action">
@@ -1679,7 +1794,7 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
               </form>
             </div>"""
 
-        delay_cls = f"d{min(i+1,6)}"
+        delay_cls = f"d{min(i+1, 6)}"
         spiele_html += f"""
         <div class="match-card {card_extra} fade-in {delay_cls}" id="spiel-{sid}">
           <div class="mc-accent {acc_cls}"></div>
@@ -1714,7 +1829,6 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
     {navbar}
     <div class="page">
       <div class="wrap">
-        <!-- Profile + Stats -->
         <div style="display:grid;grid-template-columns:280px 1fr;gap:18px;margin-bottom:32px;align-items:start;" class="fade-in">
           <div class="profile-card">
             <img class="profile-head" src="https://mc-heads.net/avatar/{username}/80" alt="{username}" onerror="this.style.opacity='0.3'">
@@ -1748,7 +1862,6 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
           </div>
         </div>
 
-        <!-- Section Header -->
         <div style="margin-bottom:18px;" class="fade-in">
           <div class="sec-eyebrow">⚽ Gruppenphase 2026</div>
           <div class="sec-title">Spielplan & Tipps</div>
@@ -1756,11 +1869,10 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         </div>
 
         {live_banner}
+        {today_banner}
 
-        <!-- Tabs -->
         <div class="tabs-wrap fade-in">{tabs_html}</div>
 
-        <!-- Gruppe Block -->
         <div class="card fade-in">
           <div class="gruppe-header">
             <div class="gr-letter">{gruppe_id}</div>
@@ -1806,8 +1918,43 @@ def dashboard():
         load_data()
         if username not in user_db:
             return redirect(url_for('home'))
-    mein_team = next((t for t in ALLE_TEAMS if t["name"] == user_db[username].get("lieblingsteam")), None)
-    aktive_gruppe = mein_team["gruppe"] if mein_team else "A"
+    # Auto-detect best group to show: first group with a game today/tomorrow, else fav team's group
+    heute = datetime.date.today()
+    morgen = heute + datetime.timedelta(days=1)
+    aktive_gruppe = None
+
+    # Find first group with a game today
+    for gk, gd in WM_GRUPPEN.items():
+        for sp in gd["spiele"]:
+            try:
+                sp_date = datetime.datetime.strptime(sp["datum"], "%d.%m.%Y").date()
+                if sp_date == heute:
+                    aktive_gruppe = gk
+                    break
+            except:
+                pass
+        if aktive_gruppe:
+            break
+
+    # If no game today, try tomorrow
+    if not aktive_gruppe:
+        for gk, gd in WM_GRUPPEN.items():
+            for sp in gd["spiele"]:
+                try:
+                    sp_date = datetime.datetime.strptime(sp["datum"], "%d.%m.%Y").date()
+                    if sp_date == morgen:
+                        aktive_gruppe = gk
+                        break
+                except:
+                    pass
+            if aktive_gruppe:
+                break
+
+    # Fallback: fav team's group
+    if not aktive_gruppe:
+        mein_team = next((t for t in ALLE_TEAMS if t["name"] == user_db[username].get("lieblingsteam")), None)
+        aktive_gruppe = mein_team["gruppe"] if mein_team else "A"
+
     return render_gruppe_page(username, aktive_gruppe, "dashboard")
 
 @app.route('/gruppe/<gruppe_id>')
@@ -1835,13 +1982,12 @@ def leaderboard():
     user_info = user_db.get(username, {"points": 1000, "tipps": {}, "lieblingsteam": None})
     navbar = get_navbar(username, user_info["points"], user_info.get("lieblingsteam"), "leaderboard")
     lb = get_leaderboard()
-    medals = {1:("🥇","r1"), 2:("🥈","r2"), 3:("🥉","r3")}
+    medals = {1: ("🥇", "r1"), 2: ("🥈", "r2"), 3: ("🥉", "r3")}
 
-    # Podium (top 3)
     podium_html = ""
     if len(lb) >= 3:
         def podium_card(entry, rank, cls):
-            medal, _ = medals.get(rank, ("",""))
+            medal, _ = medals.get(rank, ("", ""))
             team = next((t for t in ALLE_TEAMS if t["name"] == entry.get("lieblingsteam")), None)
             team_html = f'{flag_img(team["code"],16)} {team["name"]}' if team else ""
             return f"""
@@ -1859,13 +2005,12 @@ def leaderboard():
           {podium_card(lb[2], 3, "podium-card po-3")}
         </div>"""
 
-    # Rows
     rows_html = ""
     for i, entry in enumerate(lb, 1):
         rank_class = f"rk-{i}" if i <= 3 else ""
         is_me = (entry["username"] == username)
         if is_me: rank_class += " rk-me"
-        medal, rank_color = medals.get(i, ("",""))
+        medal, rank_color = medals.get(i, ("", ""))
         rank_display = f'<span class="lb-rank {rank_color}">{medal or str(i)}</span>'
         team = next((t for t in ALLE_TEAMS if t["name"] == entry.get("lieblingsteam")), None)
         team_html = f'{flag_img(team["code"],16)} {team["name"]}' if team else ""
@@ -1887,7 +2032,7 @@ def leaderboard():
     if not lb:
         rows_html = '<div style="text-align:center;color:var(--muted);padding:60px;font-family:\'Rajdhani\';font-weight:700;font-size:15px;letter-spacing:1px;">NOCH KEINE SPIELER REGISTRIERT</div>'
 
-    my_rank = next((i+1 for i,e in enumerate(lb) if e["username"] == username), None)
+    my_rank = next((i+1 for i, e in enumerate(lb) if e["username"] == username), None)
     my_rank_txt = f"Platz {my_rank} von {len(lb)}" if my_rank else "–"
 
     return BASE_HTML + f"""
@@ -1899,14 +2044,11 @@ def leaderboard():
           <div style="font-family:'Bebas Neue';font-size:56px;letter-spacing:4px;background:linear-gradient(135deg,var(--gold3),var(--copper));-webkit-background-clip:text;-webkit-text-fill-color:transparent;">RANGLISTE</div>
           <div class="sec-sub">Dein Rang: <strong style="color:var(--gold);">{my_rank_txt}</strong></div>
         </div>
-
         {podium_html}
-
         <div class="lb-search-wrap fade-in">
           <div class="lb-search-icon">🔍</div>
           <input type="text" class="lb-search" id="lb-search" placeholder="Spieler suchen..." autocomplete="off" spellcheck="false">
         </div>
-
         <div class="lb-head-row fade-in">
           <div>#</div><div>Spieler</div><div style="text-align:center;">Tipps</div><div style="text-align:right;">Punkte</div>
         </div>
@@ -1955,31 +2097,19 @@ def punkte():
           <div style="font-family:'Bebas Neue';font-size:24px;letter-spacing:3px;color:var(--gold);margin-bottom:16px;">🎯 TREFFERQUOTEN</div>
           <div class="pts-grid">
             <div class="pts-row top">
-              <div>
-                <div class="pts-label">🎯 Perfektes Ergebnis</div>
-                <div class="pts-sub">z.B. Tipp 2:1 → Ergebnis 2:1</div>
-              </div>
+              <div><div class="pts-label">🎯 Perfektes Ergebnis</div><div class="pts-sub">z.B. Tipp 2:1 → Ergebnis 2:1</div></div>
               <div class="pts-val">+1.000 ◈</div>
             </div>
             <div class="pts-row">
-              <div>
-                <div class="pts-label">⚡ Richtige Tordifferenz</div>
-                <div class="pts-sub">z.B. Tipp 3:1 → Ergebnis 2:0</div>
-              </div>
+              <div><div class="pts-label">⚡ Richtige Tordifferenz</div><div class="pts-sub">z.B. Tipp 3:1 → Ergebnis 2:0</div></div>
               <div class="pts-val">+500 ◈</div>
             </div>
             <div class="pts-row">
-              <div>
-                <div class="pts-label">✅ Richtige Tendenz</div>
-                <div class="pts-sub">Sieg / Unentschieden / Niederlage</div>
-              </div>
+              <div><div class="pts-label">✅ Richtige Tendenz</div><div class="pts-sub">Sieg / Unentschieden / Niederlage</div></div>
               <div class="pts-val">+200 ◈</div>
             </div>
             <div class="pts-row" style="border-color:rgba(255,87,34,0.25);background:rgba(255,87,34,0.04);">
-              <div>
-                <div class="pts-label">❌ Falsch getippt</div>
-                <div class="pts-sub">Falsche Tendenz</div>
-              </div>
+              <div><div class="pts-label">❌ Falsch getippt</div><div class="pts-sub">Falsche Tendenz</div></div>
               <div class="pts-val neg">0 ◈</div>
             </div>
           </div>
@@ -2063,7 +2193,7 @@ def submit_tipp():
 # ==========================================
 @app.route('/auswertung')
 def auswertung():
-    key = request.args.get("key","")
+    key = request.args.get("key", "")
     if key != "ADMIN1337":
         return "Kein Zugriff", 403
     spiel_id = request.args.get("spiel_id")
@@ -2104,11 +2234,11 @@ def auswertung():
 
 @app.route('/admin')
 def admin():
-    key = request.args.get("key","")
+    key = request.args.get("key", "")
     if key != "ADMIN1337":
         return "Kein Zugriff", 403
     output = f"<pre style='background:#111;color:#0f0;padding:20px;'>WM 2026 Admin – {len(user_db)} Spieler\n\n"
-    for uname, data in sorted(user_db.items(), key=lambda x: -x[1].get("points",0)):
+    for uname, data in sorted(user_db.items(), key=lambda x: -x[1].get("points", 0)):
         output += f"{uname}: {data.get('points',0)} ◈  {len(data.get('tipps',{}))} Tipps\n"
     output += "</pre>"
     return output
