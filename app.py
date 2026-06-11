@@ -24,9 +24,9 @@ except ImportError:
     REQUESTS_AVAILABLE = False
     print("[WARN] 'requests' nicht installiert – Live-Scores deaktiviert. Installiere mit: pip install requests")
 
-# ==========================================
+
 # KONFIGURATION
-# ==========================================
+
 chatlog_ordner = r"C:\Users\zaine\Downloads\mmc-develop-win32\MultiMC\instances\1.8.9\.minecraft\neoessentials\chatlog"
 
 DATA_FILE = "wm2026_data.json"
