@@ -1,4 +1,3 @@
-cat > /home/claude/wm_tipp_portal.py << 'PYEOF'
 import time
 import os
 import datetime
