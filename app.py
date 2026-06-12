@@ -2565,4 +2565,4 @@ if __name__ == '__main__':
         print(e)
         input()
 PYEOF
-echo "Done, line count: $(wc -l < /home/claude/wm_tipp_portal.py)"
+
