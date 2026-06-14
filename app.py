@@ -2532,7 +2532,7 @@ def adminpanel():
         </div>
         <div class="card" style="text-align:center;padding:20px 14px;">
           <div style="font-family:'Bebas Neue';font-size:44px;line-height:1;color:var(--sky);">
-            {sum(len(d.get('tipps',{{}})) for d in user_db.values())}
+            {sum(len(d.get('tipps', {})) for d in user_db.values())}
           </div>
           <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:3px;">⚽ Tipps gesamt</div>
         </div>
@@ -2876,7 +2876,7 @@ if __name__ == '__main__':
     try:
         port = int(os.environ.get('PORT', 5005))
         host = '0.0.0.0' if os.environ.get('PORT') else '127.0.0.1'
-        app.run(debug=False, host=host, port=port, use_reloader=False)
+        app.run(debug=True, host=host, port=port, use_reloader=False)
     except Exception as e:
         print(e)
         input()
