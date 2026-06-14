@@ -6,6 +6,8 @@ import random
 import threading
 import sys
 import json
+import hashlib
+import secrets
 
 try:
     from flask import Flask, request, jsonify, render_template_string, session, redirect, url_for
@@ -27,8 +29,6 @@ except ImportError:
 # ==========================================
 # KONFIGURATION
 # ==========================================
-chatlog_ordner = r"C:\Users\zaine\Downloads\mmc-develop-win32\MultiMC\instances\1.8.9\.minecraft\neoessentials\chatlog"
-
 DATA_FILE = "wm2026_data.json"
 LIVESCORES_CACHE_FILE = "livescores_cache.json"
 
@@ -37,41 +37,85 @@ app.secret_key = "wm2026_griefergames_ultra_secret_1337"
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=30)
 
-active_codes = {}
-user_db = {}
 live_scores_cache = {}
-verified_users = set()
+
+ADMIN_USER = "Lattenrost1234"
+ADMIN_DEFAULT_PASSWORD = "12345678"
+
+# ==========================================
+# PASSWORT-HASHING
+# ==========================================
+def hash_password(password, salt=None):
+    if salt is None:
+        salt = secrets.token_hex(16)
+    pw_hash = hashlib.sha256((salt + password).encode('utf-8')).hexdigest()
+    return salt, pw_hash
+
+def verify_password(password, salt, pw_hash):
+    if not salt or not pw_hash:
+        return False
+    _, check_hash = hash_password(password, salt)
+    return check_hash == pw_hash
 
 # ==========================================
 # PERSISTENTER DATENSPEICHER
 # ==========================================
 def save_data():
-    global verified_users
     try:
         with open(DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(user_db, f, ensure_ascii=False, indent=2)
-        verified_users = set(user_db.keys())
     except Exception as e:
         print(f"[FEHLER] Kann Daten nicht speichern: {e}")
 
 def load_data():
-    global user_db, verified_users
+    global user_db
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 user_db = json.load(f)
-            verified_users = set(user_db.keys())
             print(f"[OK] {len(user_db)} Benutzer geladen aus {DATA_FILE}")
         except Exception as e:
             print(f"[WARN] Kann {DATA_FILE} nicht laden: {e}")
             user_db = {}
-            verified_users = set()
     else:
         user_db = {}
-        verified_users = set()
         print(f"[INFO] Neue Datenbankdatei wird angelegt: {DATA_FILE}")
 
 load_data()
+
+# ==========================================
+# ADMIN-ACCOUNT SICHERSTELLEN
+# ==========================================
+def ensure_admin_account():
+    """Stellt sicher, dass der Admin-Account Lattenrost1234 immer existiert
+    und ein gültiges Passwort hat. Falls noch kein Passwort gesetzt ist,
+    wird das Standardpasswort 12345678 vergeben."""
+    changed = False
+    if ADMIN_USER not in user_db:
+        user_db[ADMIN_USER] = {
+            "points": 1000,
+            "tipps": {},
+            "lieblingsteam": None,
+            "registered": datetime.datetime.now().strftime("%d.%m.%Y"),
+            "salt": None,
+            "pw_hash": None,
+            "is_admin": True
+        }
+        changed = True
+    if not user_db[ADMIN_USER].get("pw_hash"):
+        salt, pw_hash = hash_password(ADMIN_DEFAULT_PASSWORD)
+        user_db[ADMIN_USER]["salt"] = salt
+        user_db[ADMIN_USER]["pw_hash"] = pw_hash
+        changed = True
+    user_db[ADMIN_USER]["is_admin"] = True
+    if "points" not in user_db[ADMIN_USER]:
+        user_db[ADMIN_USER]["points"] = 1000
+    if "tipps" not in user_db[ADMIN_USER]:
+        user_db[ADMIN_USER]["tipps"] = {}
+    if changed:
+        save_data()
+
+ensure_admin_account()
 
 # ==========================================
 # PUNKTE-SYSTEM
@@ -84,200 +128,6 @@ PUNKTE_SYSTEM = {
     "einsatz":     50,
     "deadline_min": 0
 }
-
-# ==========================================
-# LIVE-SCORES SYSTEM
-# ==========================================
-FOOTBALL_API_KEY = ""
-WM_COMPETITION_ID = "2000"
-
-def fetch_live_scores_thesportsdb():
-    global live_scores_cache
-    if not REQUESTS_AVAILABLE:
-        return
-    # TheSportsDB: heute's Spiele
-    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-    url = f"https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d={today}&s=Soccer"
-    try:
-        resp = req_lib.get(url, timeout=8)
-        if resp.status_code != 200:
-            print(f"[LIVE] TheSportsDB HTTP {resp.status_code}")
-            return
-        data = resp.json()
-        events = data.get("events") or []
-        print(f"[LIVE] TheSportsDB: {len(events)} Soccer-Events heute")
-        # Debug: zeige alle Ligen
-        ligen = set(ev.get("strLeague","?") for ev in events)
-        if ligen:
-            print(f"[LIVE] Ligen: {', '.join(sorted(ligen))}")
-
-        matched = 0
-        for gruppe_data in WM_GRUPPEN.values():
-            for spiel in gruppe_data["spiele"]:
-                heim = spiel["heim"].lower()
-                gast = spiel["gast"].lower()
-                sid = spiel["id"]
-                for ev in events:
-                    ev_heim = (ev.get("strHomeTeam") or "").lower()
-                    ev_gast = (ev.get("strAwayTeam") or "").lower()
-                    ev_liga = (ev.get("strLeague") or "").lower()
-                    # Erweiterte Liga-Erkennung für WM 2026
-                    is_wm = any(kw in ev_liga for kw in [
-                        "world cup", "fifa", "wm", "mondial", "copa do mundo", "coupe du monde"
-                    ])
-                    if not is_wm:
-                        continue
-                    if _teams_match(heim, ev_heim) and _teams_match(gast, ev_gast):
-                        status = ev.get("strStatus", "").lower().strip()
-                        score_home = ev.get("intHomeScore")
-                        score_away = ev.get("intAwayScore")
-                        cache_entry = {"status": "upcoming", "heim": None, "gast": None, "minuto": None}
-                        if status in ["ft", "aet", "pen", "finished", "match finished", "after extra time", "penalties"]:
-                            cache_entry["status"] = "final"
-                            cache_entry["heim"] = int(score_home) if score_home is not None else None
-                            cache_entry["gast"] = int(score_away) if score_away is not None else None
-                        elif (status.isdigit() or status in ["ht", "live", "in progress", "1h", "2h"]
-                              or "'" in status or "+" in status):
-                            cache_entry["status"] = "live"
-                            cache_entry["heim"] = int(score_home) if score_home is not None else 0
-                            cache_entry["gast"] = int(score_away) if score_away is not None else 0
-                            if status.isdigit():
-                                cache_entry["minuto"] = int(status)
-                            elif status == "ht":
-                                cache_entry["minuto"] = 45
-                        live_scores_cache[sid] = cache_entry
-                        matched += 1
-                        print(f"[LIVE] Match gefunden: {spiel['heim']} vs {spiel['gast']} → {cache_entry}")
-                        break
-        if matched == 0:
-            print(f"[LIVE] Kein WM-Spiel in TheSportsDB gefunden. Prüfe zeitbasiertes Fallback.")
-            # Zeitbasiertes Fallback: Wenn Spiel nach Zeit LIVE sein sollte → 0:0 setzen
-            _apply_time_based_live_fallback()
-    except Exception as e:
-        print(f"[LIVE] Fehler beim Score-Abruf: {e}")
-        _apply_time_based_live_fallback()
-
-def _apply_time_based_live_fallback():
-    """
-    Wenn die API keinen Score liefert, aber das Spiel nach Uhrzeit laufen müsste:
-    Setze status=live mit Score None (zeigt ?:? an) damit zumindest LIVE-Badge erscheint.
-    Überschreibt NICHT bereits gespeicherte echte Scores.
-    """
-    jetzt = get_now_utc()
-    for gruppe_data in WM_GRUPPEN.values():
-        for spiel in gruppe_data["spiele"]:
-            sid = spiel["id"]
-            dt_utc = parse_spiel_datetime(spiel)
-            if dt_utc is None:
-                continue
-            delta_min = (jetzt - dt_utc).total_seconds() / 60
-            # Spiel läuft nach Zeit (0..110 Minuten nach Anpfiff)
-            if 0 <= delta_min < 110:
-                existing = live_scores_cache.get(sid, {})
-                # Nur setzen wenn noch kein echter Score vorhanden
-                if existing.get("status") not in ("live", "final"):
-                    live_scores_cache[sid] = {
-                        "status": "live",
-                        "heim": None,  # Kein Score verfügbar
-                        "gast": None,
-                        "minuto": int(delta_min),
-                        "fallback": True
-                    }
-                    print(f"[LIVE-FALLBACK] {spiel['heim']} vs {spiel['gast']} → LIVE (Minute ~{int(delta_min)})")
-            elif delta_min >= 110:
-                existing = live_scores_cache.get(sid, {})
-                if existing.get("status") not in ("final",) and existing.get("fallback"):
-                    live_scores_cache[sid] = {
-                        "status": "final",
-                        "heim": None,
-                        "gast": None,
-                        "fallback": True
-                    }
-                    print(f"[LIVE-FALLBACK] {spiel['heim']} vs {spiel['gast']} → FINAL (Zeit abgelaufen)")
-
-def _teams_match(our_name, api_name):
-    TEAM_ALIASES = {
-        "deutschland": ["germany", "deutschland"],
-        "niederlande": ["netherlands", "holland"],
-        "österreich": ["austria"],
-        "schweiz": ["switzerland"],
-        "elfenbeinküste": ["ivory coast", "côte d'ivoire"],
-        "tschechien": ["czech republic", "czechia"],
-        "südkorea": ["south korea", "korea republic"],
-        "südafrika": ["south africa"],
-        "saudi-arabien": ["saudi arabia"],
-        "kap verde": ["cape verde"],
-        "neuseeland": ["new zealand"],
-        "schottland": ["scotland"],
-        "brasilien": ["brazil"],
-        "frankreich": ["france"],
-        "spanien": ["spain"],
-        "italien": ["italy"],
-        "belgien": ["belgium"],
-        "kroatien": ["croatia"],
-        "ägypten": ["egypt"],
-        "norwegen": ["norway"],
-        "schweden": ["sweden"],
-        "argentinien": ["argentina"],
-        "kolumbien": ["colombia"],
-        "australien": ["australia"],
-        "türkei": ["turkey", "türkiye"],
-        "ungarn": ["hungary"],
-        "albanien": ["albania"],
-        "kamerun": ["cameroon"],
-        "nigeria": ["nigeria"],
-        "senegal": ["senegal"],
-        "marokko": ["morocco"],
-        "tunesien": ["tunisia"],
-        "portugal": ["portugal"],
-        "england": ["england"],
-        "serbien": ["serbia"],
-        "venezuela": ["venezuela"],
-        "mexiko": ["mexico"],
-        "bosnien": ["bosnia and herzegovina", "bosnia"],
-        "ecuador": ["ecuador"],
-        "paraguay": ["paraguay"],
-        "chile": ["chile"],
-        "haiti": ["haiti"],
-        "iran": ["ir iran", "iran"],
-        "katar": ["qatar"],
-        "usa": ["usa", "united states"],
-        "kanada": ["canada"],
-        "japan": ["japan"],
-        "uruguay": ["uruguay"],
-    }
-    our_lower = our_name.lower()
-    api_lower = api_name.lower()
-    if our_lower in api_lower or api_lower in our_lower:
-        return True
-    aliases = TEAM_ALIASES.get(our_lower, [our_lower])
-    for alias in aliases:
-        if alias in api_lower or api_lower in alias:
-            return True
-    return False
-
-def live_score_updater():
-    while True:
-        try:
-            fetch_live_scores_thesportsdb()
-            try:
-                with open(LIVESCORES_CACHE_FILE, 'w') as f:
-                    json.dump(live_scores_cache, f)
-            except:
-                pass
-        except Exception as e:
-            print(f"[LIVE-UPDATER] Fehler: {e}")
-        time.sleep(60)
-
-if os.path.exists(LIVESCORES_CACHE_FILE):
-    try:
-        with open(LIVESCORES_CACHE_FILE, 'r') as f:
-            live_scores_cache = json.load(f)
-        print(f"[OK] Live-Score-Cache geladen ({len(live_scores_cache)} Einträge)")
-    except:
-        pass
-
-threading.Thread(target=live_score_updater, daemon=True).start()
 
 # ==========================================
 # FLAGGEN
@@ -503,57 +353,69 @@ for gruppe_key, gruppe_data in WM_GRUPPEN.items():
 TEAM_CODE = {t["name"]: t["code"] for t in ALLE_TEAMS}
 
 # ==========================================
-# HELPER: Spielzeit-Check
+# LIVE-SCORES CACHE LADEN
 # ==========================================
+if os.path.exists(LIVESCORES_CACHE_FILE):
+    try:
+        with open(LIVESCORES_CACHE_FILE, 'r') as f:
+            live_scores_cache = json.load(f)
+        print(f"[OK] Live-Score-Cache geladen ({len(live_scores_cache)} Einträge)")
+    except:
+        pass
+
+def persist_live_cache():
+    try:
+        with open(LIVESCORES_CACHE_FILE, 'w') as f:
+            json.dump(live_scores_cache, f)
+    except Exception as e:
+        print(f"[WARN] Cache nicht gespeichert: {e}")
+
+# ==========================================
+# HELPER: Spielzeit / Status (komplett Admin-gesteuert)
+# ==========================================
+# Mögliche manuelle Status: "upcoming", "live", "halbzeit", "nachspielzeit", "final"
+# Diese werden ausschließlich vom Admin im Adminpanel gesetzt.
+
 def parse_spiel_datetime(spiel):
-    """
-    Spielzeiten sind in CEST (UTC+2, Mitteleuropäische Sommerzeit).
-    Wir konvertieren zu UTC für konsistenten Vergleich mit datetime.utcnow().
-    """
     try:
         dt_str = f"{spiel['datum']} {spiel['uhrzeit']}"
         dt_cest = datetime.datetime.strptime(dt_str, "%d.%m.%Y %H:%M")
-        # CEST = UTC+2 → subtrahiere 2h um UTC zu bekommen
         dt_utc = dt_cest - datetime.timedelta(hours=2)
         return dt_utc
     except:
         return None
 
 def get_now_local():
-    """
-    Aktuelle lokale Zeit des Servers (CEST/CET).
-    Spielzeiten im Spielplan sind in mitteleuropäischer Zeit angegeben,
-    also verwenden wir datetime.now() (Ortszeit des Servers) statt utcnow().
-    """
     return datetime.datetime.now()
 
+def get_cache_entry(sid):
+    entry = live_scores_cache.get(sid)
+    if not entry:
+        entry = {"status": "upcoming", "heim": None, "gast": None, "minuto": None, "nachspielzeit": 0}
+        live_scores_cache[sid] = entry
+    if "nachspielzeit" not in entry:
+        entry["nachspielzeit"] = 0
+    return entry
+
 def get_spiel_status(spiel):
+    """Status wird ausschließlich vom Admin über das Cache gesetzt.
+    Standard ist 'upcoming', solange der Admin nichts geändert hat."""
     sid = spiel["id"]
-    # API-Cache hat Vorrang wenn echte Live-Daten vorliegen
-    if sid in live_scores_cache:
-        cached_status = live_scores_cache[sid].get("status", "upcoming")
-        if cached_status in ("live", "final"):
-            return cached_status
-    # Zeitbasierter Fallback — Spielzeiten sind CEST (Ortszeit Mitteleuropa)
-    dt_local = parse_spiel_datetime(spiel)
-    if dt_local is None:
-        return "upcoming"
-    jetzt = get_now_local()
-    delta_min = (jetzt - dt_local).total_seconds() / 60
-    # Debug-Ausgabe damit man es im Terminal sehen kann
-    # print(f"[STATUS] {sid}: jetzt={jetzt}, anpfiff={dt_local}, delta={delta_min:.1f} min")
-    if delta_min < -30:
-        return "upcoming"
-    elif -30 <= delta_min < 0:
-        return "soon"
-    elif 0 <= delta_min < 115:   # 90 Min Spiel + 25 Min Puffer für Nachspielzeit
-        return "live"
-    else:
-        return "final"
+    entry = live_scores_cache.get(sid)
+    if entry:
+        status = entry.get("status", "upcoming")
+        if status in ("live", "halbzeit", "nachspielzeit", "final", "upcoming"):
+            return status
+    return "upcoming"
+
+def is_spiel_aktiv(spiel):
+    """True wenn das Spiel gerade läuft (live, Halbzeit oder Nachspielzeit) -
+    in diesem Fall darf NICHT mehr getippt werden."""
+    return get_spiel_status(spiel) in ("live", "halbzeit", "nachspielzeit")
 
 def tipp_erlaubt(spiel):
     status = get_spiel_status(spiel)
-    return status in ("upcoming", "soon")
+    return status == "upcoming"
 
 def get_live_score(spiel_id):
     entry = live_scores_cache.get(spiel_id)
@@ -569,12 +431,6 @@ def minuten_bis_spiel(spiel):
     return int((dt_local - jetzt).total_seconds() / 60)
 
 def get_day_label(spiel):
-    """
-    Gibt ein Tuple (label, css_class) zurück:
-    - ("HEUTE", "day-today") wenn das Spiel heute ist
-    - ("MORGEN", "day-tomorrow") wenn das Spiel morgen ist
-    - (None, None) sonst
-    """
     try:
         spiel_dt = datetime.datetime.strptime(spiel["datum"], "%d.%m.%Y").date()
     except:
@@ -593,6 +449,8 @@ def get_day_label(spiel):
 def get_leaderboard():
     lb = []
     for username, data in user_db.items():
+        if data.get("is_admin"):
+            continue
         lb.append({
             "username": username,
             "points": data.get("points", 0),
@@ -601,61 +459,6 @@ def get_leaderboard():
         })
     lb.sort(key=lambda x: x["points"], reverse=True)
     return lb
-
-# ==========================================
-# BACKGROUND LOG-READER (Minecraft Chat)
-# ==========================================
-def minecraft_log_reader():
-    global active_codes, user_db
-    heute = datetime.datetime.now().strftime("%d-%m-%Y")
-    log_pfad = os.path.join(chatlog_ordner, f"{heute}.txt")
-    print(f"[LOG-READER] Überwachung aktiv: {heute}.txt")
-    while True:
-        if not os.path.exists(log_pfad):
-            time.sleep(1)
-            heute = datetime.datetime.now().strftime("%d-%m-%Y")
-            log_pfad = os.path.join(chatlog_ordner, f"{heute}.txt")
-            continue
-        letzte_groesse = os.path.getsize(log_pfad)
-        while True:
-            try:
-                aktuelles_datum = datetime.datetime.now().strftime("%d-%m-%Y")
-                neuer_pfad = os.path.join(chatlog_ordner, f"{aktuelles_datum}.txt")
-                if neuer_pfad != log_pfad and os.path.exists(neuer_pfad):
-                    log_pfad = neuer_pfad
-                    break
-                aktuelle_groesse = os.path.getsize(log_pfad)
-                if aktuelle_groesse > letzte_groesse:
-                    with open(log_pfad, 'r', encoding='utf-8', errors='ignore') as datei:
-                        datei.seek(letzte_groesse)
-                        neuer_text = datei.read()
-                        for zeile in neuer_text.splitlines():
-                            zeile_clean = zeile.strip()
-                            if "-> mir]" in zeile_clean and "#verifyWM" in zeile_clean:
-                                match_sender = re.search(r'\]\s*\[([^\]]+)->\s*mir\]', zeile_clean)
-                                match_zahl = re.search(r'#verifyWM\s+(\d+)', zeile_clean)
-                                if match_sender and match_zahl:
-                                    ganzer_sender = match_sender.group(1).strip()
-                                    spieler_name = ganzer_sender.split()[-1]
-                                    code = match_zahl.group(1)
-                                    if code in active_codes and active_codes[code]["status"] == "pending":
-                                        active_codes[code]["status"] = "verified"
-                                        active_codes[code]["username"] = spieler_name
-                                        if spieler_name not in user_db:
-                                            user_db[spieler_name] = {
-                                                "points": 1000,
-                                                "tipps": {},
-                                                "lieblingsteam": None,
-                                                "registered": datetime.datetime.now().strftime("%d.%m.%Y")
-                                            }
-                                            save_data()
-                                        print(f"[✓] Spieler {spieler_name} verifiziert!")
-                    letzte_groesse = aktuelle_groesse
-            except Exception:
-                pass
-            time.sleep(0.2)
-
-threading.Thread(target=minecraft_log_reader, daemon=True).start()
 
 # ==========================================
 # DESIGN SYSTEM — WM 2026 ULTRA
@@ -1028,6 +831,8 @@ body::after{
 .sb-final{background:rgba(61,79,110,0.25);border:1px solid rgba(61,79,110,0.4);color:var(--muted);}
 .sb-soon{background:rgba(224,123,57,0.2);border:1px solid rgba(224,123,57,0.4);color:var(--copper);}
 .sb-up{background:rgba(41,182,246,0.12);border:1px solid rgba(41,182,246,0.25);color:var(--sky);}
+.sb-halbzeit{background:rgba(245,200,66,0.18);border:1px solid rgba(245,200,66,0.4);color:var(--gold);}
+.sb-nachspielzeit{background:rgba(244,67,54,0.25);border:1px solid rgba(244,67,54,0.55);color:#ffab91;}
 .dot-blink{
   width:5px;height:5px;border-radius:50%;background:currentColor;
   animation:dotBlink 1s step-end infinite;
@@ -1258,7 +1063,23 @@ body::after{
 .pts-val{font-family:'Bebas Neue';font-size:28px;letter-spacing:1px;background:linear-gradient(135deg,var(--gold3),var(--copper));-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;}
 .pts-val.neg{background:linear-gradient(135deg,var(--fire2),var(--fire));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
 
-/* ── REGISTER ── */
+/* ── LOGIN / REGISTER ── */
+.auth-input-wrap{margin-bottom:14px;text-align:left;}
+.auth-label{
+  display:block;font-family:'Rajdhani';font-weight:700;font-size:11px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--muted);margin-bottom:6px;
+}
+.auth-input{
+  width:100%;padding:13px 16px;
+  background:var(--g3);border:1px solid var(--border2);
+  border-radius:8px;color:var(--text);font-family:'Exo 2';font-size:15px;font-weight:500;
+  outline:none;transition:all .2s;
+}
+.auth-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(245,200,66,0.08);}
+.auth-input::placeholder{color:var(--muted);}
+.alert-fire{background:rgba(255,87,34,0.08);border:1px solid rgba(255,87,34,0.3);color:#ff8a65;}
+
+/* ── REGISTER (alt) ── */
 .code-display{
   font-family:'Bebas Neue';font-size:80px;letter-spacing:24px;
   color:var(--neon);text-align:center;padding:26px 20px;
@@ -1391,8 +1212,6 @@ BASE_HTML = """<!DOCTYPE html>
 # ==========================================
 # NAVBAR
 # ==========================================
-ADMIN_USER = "Lattenrost1234"
-
 def get_navbar(username, points, lieblingsteam, active_page="dashboard"):
     team_code = TEAM_CODE.get(lieblingsteam, "")
     team_flag = flag_img(team_code, 18) if team_code else ""
@@ -1442,7 +1261,7 @@ HOME_HTML = BASE_HTML + """
     </div>
     <p class="hero-sub fade-in d2">Tippe alle 72 Gruppenspiele der Weltmeisterschaft und beweise, dass du der beste Fußball-Prophet auf GrieferGames bist.</p>
     <div class="hero-ctas fade-in d3">
-      <a href="/register" class="btn btn-primary">⚡ Jetzt mitmachen</a>
+      <a href="/login" class="btn btn-primary">⚡ Jetzt einloggen</a>
       <a href="#features" class="btn btn-outline">↓ Mehr erfahren</a>
     </div>
   </div>
@@ -1527,112 +1346,69 @@ def home():
         return redirect(url_for('dashboard'))
     return HOME_HTML
 
-@app.route('/register')
-def register():
-    code = str(random.randint(1000, 9999))
-    active_codes[code] = {"status": "pending", "username": None}
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if "username" in session:
+        return redirect(url_for('dashboard'))
+
+    error = None
+    if request.method == 'POST':
+        username = (request.form.get('username') or "").strip()
+        password = request.form.get('password') or ""
+
+        user_entry = user_db.get(username)
+        if user_entry and verify_password(password, user_entry.get("salt"), user_entry.get("pw_hash")):
+            session["username"] = username
+            session.permanent = True
+            if username != ADMIN_USER and not user_entry.get("lieblingsteam"):
+                return redirect(url_for('choose_team'))
+            return redirect(url_for('dashboard'))
+        else:
+            error = "❌ Minecraft-Name oder Passwort falsch."
+
+    error_html = f'<div class="alert alert-fire">{error}</div>' if error else ""
+
     return BASE_HTML + f"""
     <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;position:relative;z-index:1;">
-      <div style="width:100%;max-width:520px;">
+      <div style="width:100%;max-width:440px;">
         <div class="card fade-in" style="border-color:rgba(0,229,160,0.18);">
           <div style="text-align:center;margin-bottom:22px;">
             <div style="font-size:52px;margin-bottom:12px;">🔐</div>
-            <div class="hero-chip" style="display:inline-flex;margin-bottom:14px;">Minecraft Verifizierung</div>
-            <h2 style="font-family:'Bebas Neue';font-size:40px;letter-spacing:4px;">DEIN CODE</h2>
+            <div class="hero-chip" style="display:inline-flex;margin-bottom:14px;">WM 2026 Login</div>
+            <h2 style="font-family:'Bebas Neue';font-size:36px;letter-spacing:4px;">ANMELDEN</h2>
           </div>
-          <div class="code-display">{code}</div>
-          <div class="step-card" style="margin-bottom:18px;">
-            <div style="font-family:'Rajdhani';font-weight:800;font-size:13px;letter-spacing:2px;color:var(--copper);margin-bottom:12px;text-transform:uppercase;">📋 So geht's:</div>
-            <div>1. Logge dich auf <strong style="color:var(--text);">GrieferGames</strong> ein</div>
-            <div>2. Schreibe diese Nachricht im Chat:</div>
-            <div style="margin:10px 0 0 14px;"><code>/msg Lattenrost1234 #verifyWM {code}</code></div>
-            <div style="margin-top:14px;color:var(--muted);font-size:12px;font-family:'Rajdhani';font-weight:600;">
-              ⚡ Lass dieses Fenster offen – das System erkennt die Nachricht automatisch.
+          {error_html}
+          <form method="POST">
+            <div class="auth-input-wrap">
+              <label class="auth-label">Minecraft-Name</label>
+              <input type="text" name="username" class="auth-input" placeholder="z.B. Lattenrost1234" required autofocus autocomplete="username">
             </div>
+            <div class="auth-input-wrap">
+              <label class="auth-label">Passwort</label>
+              <input type="password" name="password" class="auth-input" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">⚡ Einloggen</button>
+          </form>
+          <div style="margin-top:18px;text-align:center;font-size:12px;color:var(--muted);font-family:'Rajdhani';font-weight:600;letter-spacing:.5px;line-height:1.8;">
+            🔑 Noch keinen Zugang? Wende dich an <strong style="color:var(--text2);">{ADMIN_USER}</strong> — er vergibt dir deinen Minecraft-Namen und ein Passwort.
           </div>
-          <div id="status" class="alert alert-gold">
-            <div class="spinner"></div>
-            Warte auf Chat-Nachricht...
-          </div>
-          <div class="prog-anim"><div class="prog-anim-fill"></div></div>
         </div>
       </div>
     </div>
-    <script>
-      const iv=setInterval(()=>{{
-        fetch('/api/check_status/{code}').then(r=>r.json()).then(d=>{{
-          if(d.status==='verified'){{
-            clearInterval(iv);
-            const el=document.getElementById('status');
-            el.innerHTML='✅ Verifiziert! Weiterleitung...';
-            el.className='alert alert-neon';
-            setTimeout(()=>window.location.href='/login_success/{code}',900);
-          }}
-        }});
-      }},1000);
-    </script>
     </body></html>
     """
-
-@app.route('/api/check_status/<code>')
-def check_status(code):
-    if code in active_codes:
-        return jsonify({"status": active_codes[code]["status"]})
-    return jsonify({"status": "not_found"})
-
-@app.route('/api/verify', methods=['POST'])
-def api_verify():
-    data = request.get_json()
-    secret = data.get("secret", "")
-    code = data.get("code", "")
-    username = data.get("username", "")
-    if secret != "GG_VERIFY_SECRET_2026":
-        return jsonify({"error": "Unauthorized"}), 403
-    if code in active_codes and active_codes[code]["status"] == "pending":
-        active_codes[code]["status"] = "verified"
-        active_codes[code]["username"] = username
-        if username not in user_db:
-            user_db[username] = {
-                "points": 1000, "tipps": {}, "lieblingsteam": None,
-                "registered": datetime.datetime.now().strftime("%d.%m.%Y")
-            }
-            save_data()
-        return jsonify({"success": True})
-    return jsonify({"error": "Code nicht gefunden"}), 404
-
-@app.route('/api/live_scores')
-def api_live_scores():
-    result = {}
-    for gruppe_data in WM_GRUPPEN.values():
-        for spiel in gruppe_data["spiele"]:
-            sid = spiel["id"]
-            status = get_spiel_status(spiel)
-            score = get_live_score(sid)
-            result[sid] = {"status": status, "score": score}
-    return jsonify(result)
-
-@app.route('/login_success/<code>')
-def login_success(code):
-    if code in active_codes and active_codes[code]["status"] == "verified":
-        username = active_codes[code]["username"]
-        session["username"] = username
-        session.permanent = True
-        del active_codes[code]
-        if username in user_db and user_db[username].get("lieblingsteam"):
-            return redirect(url_for('dashboard'))
-        return redirect(url_for('choose_team'))
-    return "Fehler", 403
 
 @app.route('/choose_team', methods=['GET','POST'])
 def choose_team():
     if "username" not in session:
         return redirect(url_for('home'))
     username = session["username"]
+    if username not in user_db:
+        return redirect(url_for('home'))
     if request.method == 'POST':
         team_name = request.form.get('team')
-        if username in user_db:
-            user_db[username]["lieblingsteam"] = team_name
-            save_data()
+        user_db[username]["lieblingsteam"] = team_name
+        save_data()
         return redirect(url_for('dashboard'))
 
     groups_html = ""
@@ -1640,10 +1416,8 @@ def choose_team():
         teams_html = ""
         for team in gruppe_data["teams"]:
             code = team['code']
-            # Get the correct flagcdn code
             special_map = {"sco": "gb-sct", "eng": "gb-eng"}
             flag_code = special_map.get(code, code)
-            # Use a larger flag image as background (h120 for quality)
             bg_url = f"https://flagcdn.com/h120/{flag_code}.png"
 
             teams_html += f"""
@@ -1681,7 +1455,6 @@ def choose_team():
       </div>
     </div>
     </body></html>"""
-
 # ==========================================
 # DASHBOARD / GRUPPE VIEW
 # ==========================================
@@ -1709,18 +1482,26 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         mine_cls = "my-team" if is_mine else ""
         team_pills += f'<span class="gr-pill {mine_cls}">{flag_img(t["code"],18)} {t["name"]}</span>'
 
-    # Live Banner
+    # Live Banner (alle Gruppen, alle aktiven Spiele)
     laufende = []
     for g_data in WM_GRUPPEN.values():
         for sp in g_data["spiele"]:
-            if get_spiel_status(sp) == "live":
+            st = get_spiel_status(sp)
+            if st in ("live", "halbzeit", "nachspielzeit"):
                 sc = get_live_score(sp["id"])
                 score_txt = f"{sc['heim']}:{sc['gast']}" if sc and sc.get('heim') is not None else "?:?"
-                laufende.append((sp['heim'], score_txt, sp['gast']))
+                laufende.append((sp['heim'], score_txt, sp['gast'], st))
 
     live_banner = ""
     if laufende:
-        items = "".join(f'<span class="lb-item">{h} <span class="lb-score">{s}</span> {g}</span>' for h,s,g in laufende)
+        items = ""
+        for h, s, g, st in laufende:
+            extra = ""
+            if st == "halbzeit":
+                extra = ' <span style="color:var(--gold);">(HZ)</span>'
+            elif st == "nachspielzeit":
+                extra = ' <span style="color:#ffab91;">(NSZ)</span>'
+            items += f'<span class="lb-item">{h} <span class="lb-score">{s}</span> {g}{extra}</span>'
         live_banner = f"""
         <div class="live-banner fade-in">
           <div class="lb-label"><div class="dot-blink"></div> 🔴 LIVE JETZT</div>
@@ -1751,26 +1532,23 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         status = get_spiel_status(spiel)
         live_score = get_live_score(sid)
         min_bis = minuten_bis_spiel(spiel)
-        erlaubt = status in ("upcoming", "soon")
+        erlaubt = (status == "upcoming")
+        nachspielzeit_min = live_scores_cache.get(sid, {}).get("nachspielzeit", 0)
 
         heim_code = TEAM_CODE.get(spiel["heim"], "")
         gast_code = TEAM_CODE.get(spiel["gast"], "")
 
-        # Determine if this game is today or tomorrow
         day_label, day_css = get_day_label(spiel)
 
         card_extra = ""
         acc_cls = "acc-upcoming"
 
-        if status == "live":
+        if status in ("live", "halbzeit", "nachspielzeit"):
             card_extra = "is-live"
             acc_cls = "acc-live"
         elif status == "final":
             card_extra = "is-final"
             acc_cls = "acc-final"
-        elif status == "soon":
-            card_extra = "is-today"
-            acc_cls = "acc-soon"
         elif day_label == "HEUTE":
             card_extra = "is-today"
             acc_cls = "acc-today"
@@ -1780,12 +1558,21 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         else:
             acc_cls = "acc-upcoming"
 
-        # Center block — time display
-        if status in ("live", "final") and live_score and live_score.get("heim") is not None:
-            num_cls = "num-live" if status == "live" else "num-final"
-            chip = (f'<div class="status-badge sb-live"><div class="dot-blink"></div> LIVE</div>'
-                    if status == "live" else
-                    f'<div class="status-badge sb-final">ABPFIFF</div>')
+        # Center block — Status-Anzeige
+        if status in ("live", "halbzeit", "nachspielzeit", "final") and live_score and live_score.get("heim") is not None:
+            if status == "live":
+                num_cls = "num-live"
+                chip = f'<div class="status-badge sb-live"><div class="dot-blink"></div> LIVE</div>'
+            elif status == "halbzeit":
+                num_cls = "num-live"
+                chip = f'<div class="status-badge sb-halbzeit">⏸ HALBZEIT</div>'
+            elif status == "nachspielzeit":
+                num_cls = "num-live"
+                nsz_txt = f" +{nachspielzeit_min}'" if nachspielzeit_min else ""
+                chip = f'<div class="status-badge sb-nachspielzeit"><div class="dot-blink"></div> NACHSPIELZEIT{nsz_txt}</div>'
+            else:
+                num_cls = "num-final"
+                chip = f'<div class="status-badge sb-final">ABPFIFF</div>'
             center_html = f"""
             <div class="mc-mid">
               {chip}
@@ -1795,20 +1582,17 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
                 <span class="mc-num {num_cls}">{live_score["gast"]}</span>
               </div>
             </div>"""
-        elif status in ("live", "final"):
-            chip = (f'<div class="status-badge sb-live"><div class="dot-blink"></div> LIVE</div>'
-                    if status == "live" else
-                    f'<div class="status-badge sb-final">ABPFIFF</div>')
+        elif status in ("live", "halbzeit", "nachspielzeit", "final"):
+            if status == "live":
+                chip = f'<div class="status-badge sb-live"><div class="dot-blink"></div> LIVE</div>'
+            elif status == "halbzeit":
+                chip = f'<div class="status-badge sb-halbzeit">⏸ HALBZEIT</div>'
+            elif status == "nachspielzeit":
+                chip = f'<div class="status-badge sb-nachspielzeit"><div class="dot-blink"></div> NACHSPIELZEIT</div>'
+            else:
+                chip = f'<div class="status-badge sb-final">ABPFIFF</div>'
             center_html = f'<div class="mc-mid">{chip}<div class="mc-vs">?:?</div></div>'
-        elif status == "soon":
-            # Game starting soon (within 30 min)
-            center_html = f"""<div class="mc-mid">
-              <div class="status-badge sb-soon">⚡ BALD</div>
-              <div class="mc-time-today">{spiel['uhrzeit']}</div>
-              <div class="day-badge day-today"><div class="dot-blink"></div> HEUTE</div>
-            </div>"""
         elif day_label == "HEUTE":
-            # Today's game, not yet starting
             center_html = f"""<div class="mc-mid">
               <div class="day-badge day-today">🔥 HEUTE</div>
               <div class="mc-time-today">{spiel['uhrzeit']}</div>
@@ -1850,7 +1634,7 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
                 {eval_html}
               </div>
             </div>"""
-        elif status == "live":
+        elif status in ("live", "halbzeit", "nachspielzeit"):
             action_html = '<div class="mc-action"><div class="badge-locked">🔴 Läuft gerade</div></div>'
         elif status == "final":
             action_html = '<div class="mc-action"><div class="badge-missed">— Kein Tipp</div></div>'
@@ -1858,14 +1642,10 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
             action_html = '<div class="mc-action"><div class="badge-locked">🔒 Gesperrt</div></div>'
         else:
             btn_label = "Tippen (−50◈)"
-            if status == "soon":
-                btn_label = "⚡ Jetzt! (−50◈)"
-            elif day_label == "HEUTE":
+            if day_label == "HEUTE":
                 btn_label = "🔥 Heute (−50◈)"
-            warn_html = f'<div class="badge-warn">⚠️ Noch {max(0,min_bis)} Min!</div>' if status == "soon" else ""
             action_html = f"""
             <div class="mc-action">
-              {warn_html}
               <form action="/submittipp" method="POST">
                 <input type="hidden" name="spiel_id" value="{sid}">
                 <input type="hidden" name="redirect_gruppe" value="{gruppe_id}">
@@ -1949,7 +1729,7 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
         <div style="margin-bottom:18px;" class="fade-in">
           <div class="sec-eyebrow">⚽ Gruppenphase 2026</div>
           <div class="sec-title">Spielplan & Tipps</div>
-          <div class="sec-sub">50 ◈ Einsatz · Gesperrt bei Anpfiff · Live-Scores in Echtzeit · <a href="/punkte" style="color:var(--copper);text-decoration:none;font-weight:700;">Punktesystem →</a></div>
+          <div class="sec-sub">50 ◈ Einsatz · Gesperrt sobald der Admin ein Spiel startet · <a href="/punkte" style="color:var(--copper);text-decoration:none;font-weight:700;">Punktesystem →</a></div>
         </div>
 
         {live_banner}
@@ -1973,23 +1753,23 @@ def render_gruppe_page(username, gruppe_id, active_page="dashboard"):
     <script>
       function checkLive(){{
         fetch('/api/live_scores').then(r=>r.json()).then(scores=>{{
-          let hasLive=false;
+          let needsReload=false;
           for(const[sid,data] of Object.entries(scores)){{
-            if(data.status==='live'||data.status==='final'){{
-              hasLive=true;
-              const el=document.getElementById('spiel-'+sid);
-              if(el){{
-                if((data.status==='live'&&!el.classList.contains('is-live'))||
-                   (data.status==='final'&&!el.classList.contains('is-final'))){{
-                  window.location.reload();return;
-                }}
-              }}
+            const el=document.getElementById('spiel-'+sid);
+            if(!el) continue;
+            const isLiveNow = (data.status==='live'||data.status==='halbzeit'||data.status==='nachspielzeit');
+            const wasLive = el.classList.contains('is-live');
+            const isFinalNow = data.status==='final';
+            const wasFinal = el.classList.contains('is-final');
+            if((isLiveNow && !wasLive) || (isFinalNow && !wasFinal) || (!isLiveNow && !isFinalNow && (wasLive||wasFinal))){{
+              needsReload=true;
             }}
+            if(isLiveNow) needsReload = needsReload || true;
           }}
-          if(hasLive)setTimeout(()=>window.location.reload(),30000);
+          if(needsReload) setTimeout(()=>window.location.reload(),500);
         }}).catch(()=>{{}});
       }}
-      setTimeout(checkLive,10000);setInterval(checkLive,60000);
+      setInterval(checkLive,15000);
     </script>
     </body></html>"""
 
@@ -1999,15 +1779,17 @@ def dashboard():
         return redirect(url_for('home'))
     username = session["username"]
     if username not in user_db:
-        load_data()
-        if username not in user_db:
-            return redirect(url_for('home'))
+        return redirect(url_for('home'))
+
+    if username == ADMIN_USER:
+        # Admin sieht standardmäßig Gruppe A, kann aber überall hin
+        return render_gruppe_page(username, "A", "dashboard")
+
     # Auto-detect best group to show: first group with a game today/tomorrow, else fav team's group
     heute = datetime.date.today()
     morgen = heute + datetime.timedelta(days=1)
     aktive_gruppe = None
 
-    # Find first group with a game today
     for gk, gd in WM_GRUPPEN.items():
         for sp in gd["spiele"]:
             try:
@@ -2020,7 +1802,6 @@ def dashboard():
         if aktive_gruppe:
             break
 
-    # If no game today, try tomorrow
     if not aktive_gruppe:
         for gk, gd in WM_GRUPPEN.items():
             for sp in gd["spiele"]:
@@ -2034,7 +1815,6 @@ def dashboard():
             if aktive_gruppe:
                 break
 
-    # Fallback: fav team's group
     if not aktive_gruppe:
         mein_team = next((t for t in ALLE_TEAMS if t["name"] == user_db[username].get("lieblingsteam")), None)
         aktive_gruppe = mein_team["gruppe"] if mein_team else "A"
@@ -2047,14 +1827,22 @@ def gruppe_ansicht(gruppe_id):
         return redirect(url_for('home'))
     username = session["username"]
     if username not in user_db:
-        load_data()
-        if username not in user_db:
-            return redirect(url_for('home'))
+        return redirect(url_for('home'))
     gruppe_id = gruppe_id.upper()
     if gruppe_id not in WM_GRUPPEN:
         return redirect(url_for('dashboard'))
     return render_gruppe_page(username, gruppe_id, "dashboard")
 
+@app.route('/api/live_scores')
+def api_live_scores():
+    result = {}
+    for gruppe_data in WM_GRUPPEN.values():
+        for spiel in gruppe_data["spiele"]:
+            sid = spiel["id"]
+            status = get_spiel_status(spiel)
+            score = get_live_score(sid)
+            result[sid] = {"status": status, "score": score}
+    return jsonify(result)
 # ==========================================
 # LEADERBOARD
 # ==========================================
@@ -2063,6 +1851,8 @@ def leaderboard():
     if "username" not in session:
         return redirect(url_for('home'))
     username = session["username"]
+    if username not in user_db:
+        return redirect(url_for('home'))
     user_info = user_db.get(username, {"points": 1000, "tipps": {}, "lieblingsteam": None})
     navbar = get_navbar(username, user_info["points"], user_info.get("lieblingsteam"), "leaderboard")
     lb = get_leaderboard()
@@ -2165,6 +1955,8 @@ def punkte():
     if "username" not in session:
         return redirect(url_for('home'))
     username = session["username"]
+    if username not in user_db:
+        return redirect(url_for('home'))
     user_info = user_db.get(username, {"points": 1000, "tipps": {}, "lieblingsteam": None})
     navbar = get_navbar(username, user_info["points"], user_info.get("lieblingsteam"), "punkte")
     return BASE_HTML + f"""
@@ -2217,13 +2009,13 @@ def punkte():
           <div style="font-family:'Bebas Neue';font-size:24px;letter-spacing:3px;color:var(--live);margin-bottom:16px;">🔒 TIPP-SPERRE</div>
           <div class="pts-row" style="border-color:rgba(244,67,54,0.3);background:rgba(244,67,54,0.05);">
             <div>
-              <div class="pts-label">Gesperrt bei Spielbeginn</div>
-              <div class="pts-sub">Sobald das Spiel als LIVE erkannt wird – kein Tippen mehr möglich</div>
+              <div class="pts-label">Gesperrt sobald der Admin das Spiel startet</div>
+              <div class="pts-sub">Der Admin setzt jedes Spiel manuell auf LIVE — danach ist Tippen für dieses Spiel nicht mehr möglich</div>
             </div>
             <div style="font-family:'Bebas Neue';font-size:30px;color:var(--live);letter-spacing:2px;">LIVE</div>
           </div>
           <div style="margin-top:12px;padding:12px 16px;background:var(--g3);border-radius:8px;font-size:13px;color:var(--text2);line-height:1.8;font-weight:500;">
-            📡 <strong style="color:var(--text);">Live-Scores:</strong> Während Spiele laufen siehst du den Echtzeit-Spielstand direkt im Dashboard. Die Seite aktualisiert sich automatisch alle 30 Sekunden.
+            📡 <strong style="color:var(--text);">Live-Status:</strong> Während Spiele laufen siehst du den aktuellen Spielstand, Halbzeit- und Nachspielzeit-Status direkt im Dashboard. Die Seite aktualisiert sich automatisch.
           </div>
         </div>
 
@@ -2248,7 +2040,7 @@ def submit_tipp():
     redirect_gruppe = request.form.get("redirect_gruppe")
 
     if username not in user_db:
-        user_db[username] = {"points": 1000, "tipps": {}, "lieblingsteam": None}
+        return redirect(url_for('home'))
 
     spiel_gefunden = None
     for gruppe_data in WM_GRUPPEN.values():
@@ -2259,7 +2051,8 @@ def submit_tipp():
 
     if spiel_gefunden and spiel_id not in user_db[username]["tipps"]:
         status = get_spiel_status(spiel_gefunden)
-        if status in ("upcoming", "soon"):
+        # Tippen nur erlaubt, solange der Admin das Spiel nicht gestartet hat (status == upcoming)
+        if status == "upcoming":
             if user_db[username]["points"] >= PUNKTE_SYSTEM["einsatz"]:
                 user_db[username]["points"] -= PUNKTE_SYSTEM["einsatz"]
                 user_db[username]["tipps"][spiel_id] = {
@@ -2271,7 +2064,6 @@ def submit_tipp():
     if redirect_gruppe:
         return redirect(url_for('gruppe_ansicht', gruppe_id=redirect_gruppe))
     return redirect(url_for('dashboard'))
-
 # ==========================================
 # ADMIN PANEL
 # ==========================================
@@ -2309,7 +2101,7 @@ ADMIN_CSS = """
 /* Match row */
 .ap-match{
   display:grid;
-  grid-template-columns:180px 1fr 340px;
+  grid-template-columns:200px 140px 1fr;
   align-items:center;gap:16px;
   background:var(--card2);
   border:1px solid var(--border3);
@@ -2318,6 +2110,8 @@ ADMIN_CSS = """
 }
 .ap-match:hover{border-color:rgba(255,255,255,0.1);}
 .ap-match.status-live{border-color:rgba(244,67,54,0.4);background:rgba(244,67,54,0.05);}
+.ap-match.status-halbzeit{border-color:rgba(245,200,66,0.4);background:rgba(245,200,66,0.05);}
+.ap-match.status-nachspielzeit{border-color:rgba(244,67,54,0.55);background:rgba(244,67,54,0.08);}
 .ap-match.status-final{border-color:rgba(0,229,160,0.25);background:rgba(0,229,160,0.03);}
 .ap-match.status-upcoming{border-color:rgba(41,182,246,0.15);}
 
@@ -2335,33 +2129,49 @@ ADMIN_CSS = """
 
 /* Status badge in admin */
 .ap-status{
-  display:flex;align-items:center;gap:8px;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
   font-family:'Rajdhani';font-weight:700;font-size:11px;letter-spacing:1.5px;
   text-transform:uppercase;
 }
+.ap-s-pill{display:flex;align-items:center;gap:6px;}
 .ap-s-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 .ap-s-live .ap-s-dot{background:var(--live);animation:dotBlink .7s step-end infinite;}
 .ap-s-live{color:var(--live);}
+.ap-s-halbzeit .ap-s-dot{background:var(--gold);}
+.ap-s-halbzeit{color:var(--gold);}
+.ap-s-nachspielzeit .ap-s-dot{background:var(--live);animation:dotBlink .5s step-end infinite;}
+.ap-s-nachspielzeit{color:#ffab91;}
 .ap-s-final .ap-s-dot{background:var(--neon);}
 .ap-s-final{color:var(--neon);}
 .ap-s-upcoming .ap-s-dot{background:var(--sky);}
 .ap-s-upcoming{color:var(--sky);}
 
-/* Tipps summary */
-.ap-tipps-count{
-  font-family:'Bebas Neue';font-size:22px;letter-spacing:1px;color:var(--gold);
+/* Score control */
+.ap-score-control{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  background:var(--g3);border-radius:8px;padding:8px 10px;
 }
-.ap-tipps-label{font-family:'Rajdhani';font-weight:700;font-size:10px;color:var(--muted);
-  text-transform:uppercase;letter-spacing:1.5px;}
+.ap-score-team{display:flex;flex-direction:column;align-items:center;gap:4px;}
+.ap-score-num{
+  font-family:'Bebas Neue';font-size:32px;line-height:1;color:var(--text);min-width:38px;text-align:center;
+}
+.ap-score-btns{display:flex;gap:4px;}
+.ap-score-btn{
+  width:24px;height:24px;border-radius:5px;border:1px solid var(--border2);
+  background:var(--g4);color:var(--text2);cursor:pointer;font-family:'Bebas Neue';
+  font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.ap-score-btn:hover{background:rgba(245,200,66,0.15);border-color:rgba(245,200,66,0.4);color:var(--gold);}
+.ap-score-sep-admin{font-family:'Bebas Neue';font-size:24px;color:var(--muted);}
 
 /* Action area */
-.ap-actions{display:flex;flex-direction:column;gap:8px;}
+.ap-actions{display:flex;flex-direction:column;gap:8px;align-items:flex-end;}
 
 /* Status toggle buttons */
-.ap-btn-row{display:flex;gap:6px;flex-wrap:wrap;}
+.ap-btn-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
 .ap-btn{
   font-family:'Rajdhani';font-weight:800;font-size:11px;letter-spacing:1.5px;
-  text-transform:uppercase;padding:7px 14px;border-radius:6px;
+  text-transform:uppercase;padding:7px 12px;border-radius:6px;
   border:1.5px solid transparent;cursor:pointer;transition:all .15s;
   background:transparent;
 }
@@ -2371,27 +2181,36 @@ ADMIN_CSS = """
   box-shadow:0 0 12px rgba(244,67,54,0.3);
 }
 .ap-btn-live.active{background:rgba(244,67,54,0.25);}
+.ap-btn-halbzeit{color:var(--gold);border-color:rgba(245,200,66,0.4);}
+.ap-btn-halbzeit:hover,.ap-btn-halbzeit.active{background:rgba(245,200,66,0.18);border-color:rgba(245,200,66,0.8);}
+.ap-btn-halbzeit.active{background:rgba(245,200,66,0.25);}
+.ap-btn-nachspielzeit{color:#ffab91;border-color:rgba(244,67,54,0.4);}
+.ap-btn-nachspielzeit:hover,.ap-btn-nachspielzeit.active{background:rgba(244,67,54,0.18);border-color:rgba(244,67,54,0.8);}
+.ap-btn-nachspielzeit.active{background:rgba(244,67,54,0.25);}
+.ap-btn-final{color:var(--neon);border-color:rgba(0,229,160,0.4);}
+.ap-btn-final:hover,.ap-btn-final.active{background:rgba(0,229,160,0.18);border-color:rgba(0,229,160,0.8);}
+.ap-btn-final.active{background:rgba(0,229,160,0.25);}
 .ap-btn-upcoming{color:var(--sky);border-color:rgba(41,182,246,0.35);}
 .ap-btn-upcoming:hover,.ap-btn-upcoming.active{background:rgba(41,182,246,0.12);border-color:rgba(41,182,246,0.7);}
 .ap-btn-upcoming.active{background:rgba(41,182,246,0.2);}
 
-/* Abschluss form */
-.ap-finish-form{
-  background:var(--g3);border:1px solid rgba(0,229,160,0.2);
-  border-radius:8px;padding:10px 14px;
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-}
-.ap-finish-form.hidden{display:none;}
-.ap-score-in{
-  width:44px;height:36px;
-  background:var(--g2);border:1px solid rgba(255,255,255,0.12);
-  color:#fff;border-radius:6px;text-align:center;
-  font-family:'Bebas Neue';font-size:20px;
+/* Nachspielzeit input */
+.ap-nsz-row{display:flex;align-items:center;gap:6px;justify-content:flex-end;}
+.ap-nsz-label{font-family:'Rajdhani';font-weight:700;font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+.ap-nsz-in{
+  width:46px;height:30px;background:var(--g3);border:1px solid var(--border2);
+  color:#fff;border-radius:5px;text-align:center;font-family:'Bebas Neue';font-size:15px;
   -moz-appearance:textfield;appearance:none;
 }
-.ap-score-in::-webkit-inner-spin-button,.ap-score-in::-webkit-outer-spin-button{-webkit-appearance:none;}
-.ap-score-in:focus{outline:none;border-color:var(--neon);box-shadow:0 0 0 3px rgba(0,229,160,0.12);}
-.ap-score-sep{font-family:'Bebas Neue';font-size:18px;color:var(--muted);}
+.ap-nsz-in::-webkit-inner-spin-button,.ap-nsz-in::-webkit-outer-spin-button{-webkit-appearance:none;}
+.ap-nsz-btn{
+  font-family:'Rajdhani';font-weight:800;font-size:10px;letter-spacing:1px;text-transform:uppercase;
+  padding:6px 10px;border-radius:5px;border:1.5px solid rgba(244,67,54,0.4);color:#ffab91;
+  background:transparent;cursor:pointer;transition:all .15s;
+}
+.ap-nsz-btn:hover{background:rgba(244,67,54,0.15);}
+
+/* Abschluss/Auswertung */
 .ap-finish-btn{
   background:linear-gradient(135deg,var(--neon2),var(--neon));
   color:#000;border:none;border-radius:6px;
@@ -2400,15 +2219,13 @@ ADMIN_CSS = """
   transition:all .2s;white-space:nowrap;
 }
 .ap-finish-btn:hover{transform:scale(1.04);box-shadow:0 4px 14px rgba(0,229,160,0.4);}
-.ap-finish-label{font-family:'Rajdhani';font-weight:700;font-size:12px;color:var(--neon2);
-  letter-spacing:.5px;}
 
 /* Result tag */
 .ap-result-tag{
   display:inline-flex;align-items:center;gap:6px;
   background:rgba(0,229,160,0.1);border:1px solid rgba(0,229,160,0.3);
   border-radius:6px;padding:5px 12px;
-  font-family:'Bebas Neue';font-size:20px;letter-spacing:2px;color:var(--neon);
+  font-family:'Bebas Neue';font-size:16px;letter-spacing:1px;color:var(--neon);
 }
 
 /* User tipps table */
@@ -2444,8 +2261,9 @@ ADMIN_CSS = """
   border-radius:4px;transition:all .15s;
 }
 .ap-expand-btn:hover{color:var(--text2);background:rgba(255,255,255,0.04);}
-.ap-tipps-panel{display:none;margin-top:8px;}
+.ap-tipps-panel{display:none;margin-top:8px;width:100%;}
 .ap-tipps-panel.open{display:block;}
+.ap-full-row{grid-column:1 / -1;}
 
 /* Auswertung result rows */
 .ap-result-row{
@@ -2456,6 +2274,30 @@ ADMIN_CSS = """
 .ap-result-row.tendenz_tor{background:rgba(0,229,160,0.06);}
 .ap-result-row.tendenz{background:rgba(41,182,246,0.06);}
 .ap-result-row.falsch{background:rgba(255,87,34,0.05);}
+
+/* Account management */
+.ap-acc-form{
+  display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;
+  background:var(--g3);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:20px;
+}
+.ap-acc-row{
+  display:flex;align-items:center;gap:12px;padding:10px 14px;
+  background:var(--g3);border-radius:8px;margin-bottom:6px;
+}
+.ap-acc-name{font-family:'Rajdhani';font-weight:800;font-size:14px;flex:1;}
+.ap-acc-pts{font-family:'Bebas Neue';font-size:18px;color:var(--gold);letter-spacing:1px;}
+.ap-acc-meta{font-family:'Rajdhani';font-weight:700;font-size:11px;color:var(--muted);}
+.ap-pw-form{display:flex;gap:6px;align-items:center;}
+.ap-pw-in{
+  width:120px;height:32px;background:var(--g2);border:1px solid var(--border2);
+  color:#fff;border-radius:6px;padding:0 10px;font-family:'Rajdhani';font-weight:600;font-size:12px;
+}
+.ap-pw-btn{
+  font-family:'Rajdhani';font-weight:800;font-size:10px;letter-spacing:1px;text-transform:uppercase;
+  padding:7px 12px;border-radius:6px;border:1.5px solid rgba(41,182,246,0.4);color:var(--sky);
+  background:transparent;cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.ap-pw-btn:hover{background:rgba(41,182,246,0.15);}
 </style>
 """
 
@@ -2473,7 +2315,6 @@ def do_auswertung(spiel_id, heim_tore, gast_tore):
         tipp = data.get("tipps", {}).get(spiel_id)
         if not tipp:
             continue
-        # Skip if already evaluated
         if tipp.get("punkte_result"):
             continue
         th, tg = tipp["heim"], tipp["gast"]
@@ -2491,26 +2332,29 @@ def do_auswertung(spiel_id, heim_tore, gast_tore):
     save_data()
     return results
 
+def is_admin_session():
+    return "username" in session and session["username"] == ADMIN_USER
+
 @app.route('/adminpanel')
 def adminpanel():
-    if "username" not in session or session["username"] != ADMIN_USER:
+    if not is_admin_session():
         return redirect(url_for('home'))
     username = session["username"]
     user_info = user_db.get(username, {"points": 1000, "tipps": {}, "lieblingsteam": None})
     navbar = get_navbar(username, user_info["points"], user_info.get("lieblingsteam"), "adminpanel")
 
-    # Build the panel HTML
+    # ---------- Spielverwaltung ----------
     gruppen_html = ""
     for gr_key, gr_data in WM_GRUPPEN.items():
         spiele_html = ""
         for spiel in gr_data["spiele"]:
             sid = spiel["id"]
-            cache = live_scores_cache.get(sid, {})
+            cache = get_cache_entry(sid)
             status = cache.get("status", "upcoming")
-            heim_score = cache.get("heim")
-            gast_score = cache.get("gast")
+            heim_score = cache.get("heim") if cache.get("heim") is not None else 0
+            gast_score = cache.get("gast") if cache.get("gast") is not None else 0
+            nsz = cache.get("nachspielzeit", 0)
 
-            # Count tipps for this game
             tipps_fuer_spiel = {
                 u: d["tipps"][sid]
                 for u, d in user_db.items()
@@ -2518,21 +2362,16 @@ def adminpanel():
             }
             n_tipps = len(tipps_fuer_spiel)
 
-            # Status indicator
-            if status == "live":
-                status_html = f'<div class="ap-status ap-s-live"><div class="ap-s-dot"></div> LÄUFT</div>'
-                card_cls = "status-live"
-            elif status == "final":
-                status_html = f'<div class="ap-status ap-s-final"><div class="ap-s-dot"></div> BEENDET</div>'
-                card_cls = "status-final"
-            else:
-                status_html = f'<div class="ap-status ap-s-upcoming"><div class="ap-s-dot"></div> AUSSTEHEND</div>'
-                card_cls = "status-upcoming"
-
-            # Result display if final
-            result_html = ""
-            if status == "final" and heim_score is not None:
-                result_html = f'<div class="ap-result-tag">{heim_score} : {gast_score}</div>'
+            status_labels = {
+                "live": ("ap-s-live", "🔴 LÄUFT"),
+                "halbzeit": ("ap-s-halbzeit", "⏸ HALBZEIT"),
+                "nachspielzeit": ("ap-s-nachspielzeit", "🔴 NACHSPIELZEIT"),
+                "final": ("ap-s-final", "✅ BEENDET"),
+                "upcoming": ("ap-s-upcoming", "⏳ AUSSTEHEND"),
+            }
+            s_cls, s_label = status_labels.get(status, status_labels["upcoming"])
+            status_html = f'<div class="ap-status {s_cls}"><div class="ap-s-pill"><div class="ap-s-dot"></div> {s_label}</div></div>'
+            card_cls = f"status-{status}"
 
             # Tipps detail table
             tipps_rows = ""
@@ -2560,31 +2399,48 @@ def adminpanel():
             else:
                 tipps_panel = f'<span style="font-family:\'Rajdhani\';font-size:11px;color:var(--muted);">Noch keine Tipps</span>'
 
-            # Action buttons
-            action_html = f"""
-            <div class="ap-actions">
-              <div class="ap-btn-row">
-                <button class="ap-btn ap-btn-live {'active' if status=='live' else ''}"
-                  onclick="setStatus('{sid}','live',this)">
-                  🔴 LIVE setzen
-                </button>
-                <button class="ap-btn ap-btn-upcoming {'active' if status=='upcoming' else ''}"
-                  onclick="setStatus('{sid}','upcoming',this)">
-                  ⏸ Zurücksetzen
-                </button>
+            # Score control (Tore +/- nur sinnvoll wenn nicht final)
+            score_disabled = "disabled" if status == "final" else ""
+            score_control = f"""
+            <div class="ap-score-control">
+              <div class="ap-score-team">
+                <div class="ap-score-num" id="h-num-{sid}">{heim_score}</div>
+                <div class="ap-score-btns">
+                  <button class="ap-score-btn" onclick="adjScore('{sid}','heim',-1)" {score_disabled}>−</button>
+                  <button class="ap-score-btn" onclick="adjScore('{sid}','heim',1)" {score_disabled}>+</button>
+                </div>
               </div>
-              <div id="finish-form-{sid}" class="ap-finish-form {'hidden' if status != 'live' else ''}">
-                <span class="ap-finish-label">Abpfiff:</span>
-                <input type="number" id="h-{sid}" min="0" max="20" value="{heim_score if heim_score is not None else 0}" class="ap-score-in" placeholder="0">
-                <span class="ap-score-sep">:</span>
-                <input type="number" id="g-{sid}" min="0" max="20" value="{gast_score if gast_score is not None else 0}" class="ap-score-in" placeholder="0">
-                <button class="ap-finish-btn" onclick="finishGame('{sid}','{spiel['heim']}','{spiel['gast']}')">
-                  ✅ Abpfiff + Coins verteilen
-                </button>
+              <div class="ap-score-sep-admin">:</div>
+              <div class="ap-score-team">
+                <div class="ap-score-num" id="g-num-{sid}">{gast_score}</div>
+                <div class="ap-score-btns">
+                  <button class="ap-score-btn" onclick="adjScore('{sid}','gast',-1)" {score_disabled}>−</button>
+                  <button class="ap-score-btn" onclick="adjScore('{sid}','gast',1)" {score_disabled}>+</button>
+                </div>
               </div>
-              {result_html}
-              {tipps_panel}
             </div>"""
+
+            # Nachspielzeit control
+            nsz_control = f"""
+            <div class="ap-nsz-row">
+              <span class="ap-nsz-label">Nachspielzeit:</span>
+              <input type="number" id="nsz-{sid}" class="ap-nsz-in" min="0" max="30" value="{nsz}">
+              <button class="ap-nsz-btn" onclick="setNachspielzeit('{sid}')">⏱ Setzen</button>
+            </div>"""
+
+            # Status buttons
+            status_buttons = f"""
+            <div class="ap-btn-row">
+              <button class="ap-btn ap-btn-upcoming {'active' if status=='upcoming' else ''}" onclick="setStatus('{sid}','upcoming',this)">⏳ Geplant</button>
+              <button class="ap-btn ap-btn-live {'active' if status=='live' else ''}" onclick="setStatus('{sid}','live',this)">🔴 Live</button>
+              <button class="ap-btn ap-btn-halbzeit {'active' if status=='halbzeit' else ''}" onclick="setStatus('{sid}','halbzeit',this)">⏸ Halbzeit</button>
+              <button class="ap-btn ap-btn-nachspielzeit {'active' if status=='nachspielzeit' else ''}" onclick="setStatus('{sid}','nachspielzeit',this)">🔴 NSZ</button>
+              <button class="ap-btn ap-btn-final {'active' if status=='final' else ''}" onclick="finishGame('{sid}')">✅ Beenden</button>
+            </div>"""
+
+            result_html = ""
+            if status == "final":
+                result_html = f'<div class="ap-result-tag">{heim_score} : {gast_score}</div>'
 
             heim_code = TEAM_CODE.get(spiel["heim"], "")
             gast_code = TEAM_CODE.get(spiel["gast"], "")
@@ -2600,8 +2456,16 @@ def adminpanel():
               </div>
               <div>
                 {status_html}
+                {result_html}
               </div>
-              {action_html}
+              <div class="ap-actions">
+                {score_control}
+                {nsz_control}
+                {status_buttons}
+                <div class="ap-tipps-panel-wrap" style="text-align:right;width:100%;">
+                  {tipps_panel}
+                </div>
+              </div>
             </div>"""
 
         gruppen_html += f"""
@@ -2616,17 +2480,24 @@ def adminpanel():
         </div>
         {spiele_html}"""
 
-    # Player overview
-    player_rows = ""
-    for uname, data in sorted(user_db.items(), key=lambda x: -x[1].get("points", 0)):
+    # ---------- Account-Verwaltung ----------
+    acc_rows = ""
+    for uname, data in sorted(user_db.items(), key=lambda x: (-(x[1].get("is_admin") and 1 or 0), -x[1].get("points", 0))):
         n = len(data.get("tipps", {}))
-        player_rows += f"""
-        <div style="display:flex;align-items:center;gap:12px;padding:9px 14px;
-             background:var(--g3);border-radius:8px;margin-bottom:6px;">
+        is_admin_acc = data.get("is_admin")
+        admin_tag = ' <span style="color:var(--copper);font-size:10px;">★ ADMIN</span>' if is_admin_acc else ""
+        has_pw = "✅ Hat Passwort" if data.get("pw_hash") else "⚠️ Kein Passwort"
+        acc_rows += f"""
+        <div class="ap-acc-row">
           <img src="https://mc-heads.net/avatar/{uname}/28" style="width:28px;height:28px;border-radius:5px;image-rendering:pixelated;" onerror="this.style.display='none'">
-          <span style="font-family:'Rajdhani';font-weight:800;font-size:14px;flex:1;">{uname}</span>
-          <span style="font-family:'Bebas Neue';font-size:20px;color:var(--gold);letter-spacing:1px;">{data.get('points',0):,} ◈</span>
-          <span style="font-family:'Rajdhani';font-weight:700;font-size:12px;color:var(--muted);">{n} Tipps</span>
+          <span class="ap-acc-name">{uname}{admin_tag}</span>
+          <span class="ap-acc-meta">{has_pw}</span>
+          <span class="ap-acc-pts">{data.get('points',0):,} ◈</span>
+          <span class="ap-acc-meta">{n} Tipps</span>
+          <form class="ap-pw-form" onsubmit="return setPassword(event,'{uname}')">
+            <input type="text" class="ap-pw-in" placeholder="Neues Passwort" required minlength="4">
+            <button type="submit" class="ap-pw-btn">🔑 Passwort setzen</button>
+          </form>
         </div>"""
 
     return BASE_HTML + ADMIN_CSS + f"""
@@ -2637,10 +2508,10 @@ def adminpanel():
         <div class="ap-hero-icon">🛠️</div>
         <div>
           <div class="ap-hero-title">Admin Panel</div>
-          <div class="ap-hero-sub">Nur für Lattenrost1234 · Live-Status & Auswertung</div>
+          <div class="ap-hero-sub">Nur für Lattenrost1234 · Live-Status, Tore & Accounts</div>
         </div>
         <div style="margin-left:auto;text-align:right;">
-          <div style="font-family:'Bebas Neue';font-size:36px;letter-spacing:2px;color:var(--gold);">{len(user_db)}</div>
+          <div style="font-family:'Bebas Neue';font-size:36px;letter-spacing:2px;color:var(--gold);">{len([u for u in user_db if not user_db[u].get('is_admin')])}</div>
           <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;">Registrierte Spieler</div>
         </div>
       </div>
@@ -2649,13 +2520,13 @@ def adminpanel():
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:32px;" class="fade-in d1">
         <div class="card" style="text-align:center;padding:20px 14px;">
           <div style="font-family:'Bebas Neue';font-size:44px;line-height:1;color:var(--live);">
-            {sum(1 for g in WM_GRUPPEN.values() for s in g['spiele'] if live_scores_cache.get(s['id'],{{}}).get('status')=='live')}
+            {sum(1 for g in WM_GRUPPEN.values() for s in g['spiele'] if get_spiel_status(s) in ('live','halbzeit','nachspielzeit'))}
           </div>
           <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:3px;">🔴 Live jetzt</div>
         </div>
         <div class="card" style="text-align:center;padding:20px 14px;">
           <div style="font-family:'Bebas Neue';font-size:44px;line-height:1;color:var(--neon);">
-            {sum(1 for g in WM_GRUPPEN.values() for s in g['spiele'] if live_scores_cache.get(s['id'],{{}}).get('status')=='final')}
+            {sum(1 for g in WM_GRUPPEN.values() for s in g['spiele'] if get_spiel_status(s)=='final')}
           </div>
           <div style="font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:3px;">✅ Abgeschlossen</div>
         </div>
@@ -2667,20 +2538,36 @@ def adminpanel():
         </div>
       </div>
 
+      <!-- Account-Verwaltung -->
+      <div style="margin-bottom:10px;" class="fade-in d2">
+        <div class="sec-eyebrow">👥 Account-Verwaltung</div>
+        <div class="sec-title">Minecraft-Namen & Passwörter</div>
+        <div class="sec-sub">Neue Spieler freischalten und Passwörter vergeben/ändern</div>
+      </div>
+
+      <div class="ap-acc-form fade-in d2" style="margin-bottom:20px;">
+        <div>
+          <label class="auth-label">Minecraft-Name</label>
+          <input type="text" id="new-acc-name" class="auth-input" placeholder="z.B. 1Unbekannter" required>
+        </div>
+        <div>
+          <label class="auth-label">Passwort</label>
+          <input type="text" id="new-acc-pw" class="auth-input" placeholder="z.B. 1234" required minlength="4">
+        </div>
+        <button class="btn btn-gold btn-sm" onclick="createAccount()" style="height:46px;">➕ Freischalten</button>
+      </div>
+
+      <div class="fade-in d3" style="margin-bottom:40px;">
+        {acc_rows if acc_rows else '<div style="color:var(--muted);font-family:\'Rajdhani\';padding:20px;">Noch keine Accounts.</div>'}
+      </div>
+
       <!-- Spiele -->
       <div style="margin-bottom:10px;" class="fade-in d2">
         <div class="sec-eyebrow">⚽ Spielverwaltung</div>
         <div class="sec-title">Alle Spiele</div>
-        <div class="sec-sub">Status setzen · Ergebnis eintragen · Coins verteilen</div>
+        <div class="sec-sub">Status setzen (Live/Halbzeit/Nachspielzeit/Beendet) · Tore +/- · Nachspielzeit · Coins verteilen</div>
       </div>
       <div class="fade-in d3">{gruppen_html}</div>
-
-      <!-- Spielerliste -->
-      <div style="margin:40px 0 10px;" class="fade-in">
-        <div class="sec-eyebrow">👥 Spielerliste</div>
-        <div class="sec-title">Rangliste</div>
-      </div>
-      <div class="fade-in">{player_rows if player_rows else '<div style="color:var(--muted);font-family:\'Rajdhani\';padding:20px;">Noch keine Spieler registriert.</div>'}</div>
     </div>
 
     <script>
@@ -2701,14 +2588,10 @@ def adminpanel():
         body: JSON.stringify({{spiel_id: sid, status: newStatus}})
       }}).then(r => r.json()).then(d => {{
         if(d.ok) {{
-          showToast(newStatus === 'live' ? '🔴 ' + sid + ' ist jetzt LIVE!' : '⏸ ' + sid + ' zurückgesetzt');
-          // Update card class
+          const labels = {{live:'🔴 LIVE',halbzeit:'⏸ Halbzeit',nachspielzeit:'🔴 Nachspielzeit',upcoming:'⏳ Geplant',final:'✅ Beendet'}};
+          showToast(sid + ' → ' + (labels[newStatus]||newStatus));
           const card = document.getElementById('ap-match-' + sid);
-          card.className = 'ap-match status-' + (newStatus === 'upcoming' ? 'upcoming' : 'live');
-          // Show/hide finish form
-          const ff = document.getElementById('finish-form-' + sid);
-          if(ff) ff.classList.toggle('hidden', newStatus !== 'live');
-          // Update button active states
+          card.className = 'ap-match status-' + newStatus;
           card.querySelectorAll('.ap-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
         }} else {{
@@ -2717,23 +2600,46 @@ def adminpanel():
       }}).catch(() => showToast('❌ Netzwerkfehler', false));
     }}
 
-    function finishGame(sid, heim, gast) {{
-      const h = parseInt(document.getElementById('h-' + sid).value) || 0;
-      const g = parseInt(document.getElementById('g-' + sid).value) || 0;
-      if(!confirm('Spiel ' + sid + ' (' + heim + ' ' + h + ':' + g + ' ' + gast + ') abschließen und Coins verteilen?')) return;
+    function adjScore(sid, team, delta) {{
+      fetch('/api/admin/adjscore', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{spiel_id: sid, team: team, delta: delta}})
+      }}).then(r => r.json()).then(d => {{
+        if(d.ok) {{
+          document.getElementById('h-num-' + sid).textContent = d.heim;
+          document.getElementById('g-num-' + sid).textContent = d.gast;
+          showToast('⚽ ' + sid + ': ' + d.heim + ':' + d.gast);
+        }} else {{
+          showToast('❌ Fehler: ' + (d.error || 'Unbekannt'), false);
+        }}
+      }}).catch(() => showToast('❌ Netzwerkfehler', false));
+    }}
+
+    function setNachspielzeit(sid) {{
+      const val = parseInt(document.getElementById('nsz-' + sid).value) || 0;
+      fetch('/api/admin/nachspielzeit', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{spiel_id: sid, minuten: val}})
+      }}).then(r => r.json()).then(d => {{
+        if(d.ok) showToast('⏱ Nachspielzeit für ' + sid + ': +' + val + ' Min');
+        else showToast('❌ Fehler: ' + (d.error || 'Unbekannt'), false);
+      }}).catch(() => showToast('❌ Netzwerkfehler', false));
+    }}
+
+    function finishGame(sid) {{
+      const h = parseInt(document.getElementById('h-num-' + sid).textContent) || 0;
+      const g = parseInt(document.getElementById('g-num-' + sid).textContent) || 0;
+      if(!confirm('Spiel ' + sid + ' (' + h + ':' + g + ') beenden und Coins verteilen?')) return;
       fetch('/api/admin/finish', {{
         method: 'POST',
         headers: {{'Content-Type': 'application/json'}},
         body: JSON.stringify({{spiel_id: sid, heim: h, gast: g}})
       }}).then(r => r.json()).then(d => {{
         if(d.ok) {{
-          showToast('✅ ' + sid + ' abgeschlossen! ' + d.count + ' Tipps ausgewertet.');
-          const card = document.getElementById('ap-match-' + sid);
-          card.className = 'ap-match status-final';
-          const ff = document.getElementById('finish-form-' + sid);
-          if(ff) ff.classList.add('hidden');
-          // Show result
-          setTimeout(() => location.reload(), 1800);
+          showToast('✅ ' + sid + ' beendet! ' + d.count + ' Tipps ausgewertet.');
+          setTimeout(() => location.reload(), 1500);
         }} else {{
           showToast('❌ Fehler: ' + (d.error || 'Unbekannt'), false);
         }}
@@ -2744,21 +2650,54 @@ def adminpanel():
       const panel = document.getElementById('tipps-' + sid);
       panel.classList.toggle('open');
     }}
+
+    function createAccount() {{
+      const name = document.getElementById('new-acc-name').value.trim();
+      const pw = document.getElementById('new-acc-pw').value;
+      if(!name || pw.length < 4) {{ showToast('❌ Name und Passwort (min. 4 Zeichen) erforderlich', false); return; }}
+      fetch('/api/admin/create_account', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{username: name, password: pw}})
+      }}).then(r => r.json()).then(d => {{
+        if(d.ok) {{
+          showToast('✅ Account ' + name + ' freigeschaltet!');
+          setTimeout(() => location.reload(), 1200);
+        }} else {{
+          showToast('❌ Fehler: ' + (d.error || 'Unbekannt'), false);
+        }}
+      }}).catch(() => showToast('❌ Netzwerkfehler', false));
+    }}
+
+    function setPassword(ev, uname) {{
+      ev.preventDefault();
+      const input = ev.target.querySelector('.ap-pw-in');
+      const pw = input.value;
+      if(pw.length < 4) {{ showToast('❌ Passwort zu kurz (min. 4 Zeichen)', false); return false; }}
+      fetch('/api/admin/set_password', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{username: uname, password: pw}})
+      }}).then(r => r.json()).then(d => {{
+        if(d.ok) {{ showToast('🔑 Passwort für ' + uname + ' gesetzt!'); input.value=''; }}
+        else showToast('❌ Fehler: ' + (d.error || 'Unbekannt'), false);
+      }}).catch(() => showToast('❌ Netzwerkfehler', false));
+      return false;
+    }}
     </script>
     </body></html>"""
 
-# ── API: Admin set status (live / upcoming) ──────────────────────
+# ── API: Admin Status setzen (upcoming/live/halbzeit/nachspielzeit/final) ──
 @app.route('/api/admin/setstatus', methods=['POST'])
 def api_admin_setstatus():
-    if "username" not in session or session["username"] != ADMIN_USER:
+    if not is_admin_session():
         return jsonify({"ok": False, "error": "Kein Zugriff"}), 403
     data = request.get_json()
     sid = data.get("spiel_id", "")
     new_status = data.get("status", "upcoming")
-    if new_status not in ("live", "upcoming", "final"):
+    if new_status not in ("live", "halbzeit", "nachspielzeit", "upcoming", "final"):
         return jsonify({"ok": False, "error": "Ungültiger Status"})
 
-    # Find the spiel
     spiel = None
     for gd in WM_GRUPPEN.values():
         for sp in gd["spiele"]:
@@ -2768,49 +2707,87 @@ def api_admin_setstatus():
     if not spiel:
         return jsonify({"ok": False, "error": "Spiel nicht gefunden"})
 
-    # Update cache
-    if sid not in live_scores_cache:
-        live_scores_cache[sid] = {"status": "upcoming", "heim": None, "gast": None, "minuto": None}
-
-    live_scores_cache[sid]["status"] = new_status
+    entry = get_cache_entry(sid)
+    entry["status"] = new_status
     if new_status == "upcoming":
-        live_scores_cache[sid]["heim"] = None
-        live_scores_cache[sid]["gast"] = None
+        entry["heim"] = None
+        entry["gast"] = None
+        entry["nachspielzeit"] = 0
+    elif entry.get("heim") is None:
+        entry["heim"] = 0
+        entry["gast"] = 0
 
-    # Persist cache
-    try:
-        with open(LIVESCORES_CACHE_FILE, 'w') as f:
-            json.dump(live_scores_cache, f)
-    except Exception as e:
-        print(f"[WARN] Cache nicht gespeichert: {e}")
-
+    persist_live_cache()
     print(f"[ADMIN] {sid} → {new_status}")
     return jsonify({"ok": True})
 
-# ── API: Admin finish game + award coins ─────────────────────────
+# ── API: Admin Tore +/- ────────────────────────────────────────
+@app.route('/api/admin/adjscore', methods=['POST'])
+def api_admin_adjscore():
+    if not is_admin_session():
+        return jsonify({"ok": False, "error": "Kein Zugriff"}), 403
+    data = request.get_json()
+    sid = data.get("spiel_id", "")
+    team = data.get("team", "")
+    delta = int(data.get("delta", 0))
+
+    spiel = None
+    for gd in WM_GRUPPEN.values():
+        for sp in gd["spiele"]:
+            if sp["id"] == sid:
+                spiel = sp; break
+    if not spiel:
+        return jsonify({"ok": False, "error": "Spiel nicht gefunden"})
+    if team not in ("heim", "gast"):
+        return jsonify({"ok": False, "error": "Ungültiges Team"})
+
+    entry = get_cache_entry(sid)
+    current = entry.get(team)
+    if current is None:
+        current = 0
+    new_val = max(0, min(99, current + delta))
+    entry[team] = new_val
+    persist_live_cache()
+    return jsonify({"ok": True, "heim": entry.get("heim", 0), "gast": entry.get("gast", 0)})
+
+# ── API: Admin Nachspielzeit setzen ────────────────────────────
+@app.route('/api/admin/nachspielzeit', methods=['POST'])
+def api_admin_nachspielzeit():
+    if not is_admin_session():
+        return jsonify({"ok": False, "error": "Kein Zugriff"}), 403
+    data = request.get_json()
+    sid = data.get("spiel_id", "")
+    minuten = int(data.get("minuten", 0))
+
+    spiel = None
+    for gd in WM_GRUPPEN.values():
+        for sp in gd["spiele"]:
+            if sp["id"] == sid:
+                spiel = sp; break
+    if not spiel:
+        return jsonify({"ok": False, "error": "Spiel nicht gefunden"})
+
+    entry = get_cache_entry(sid)
+    entry["nachspielzeit"] = max(0, min(30, minuten))
+    persist_live_cache()
+    return jsonify({"ok": True, "nachspielzeit": entry["nachspielzeit"]})
+
+# ── API: Admin Spiel beenden + Coins verteilen ─────────────────
 @app.route('/api/admin/finish', methods=['POST'])
 def api_admin_finish():
-    if "username" not in session or session["username"] != ADMIN_USER:
+    if not is_admin_session():
         return jsonify({"ok": False, "error": "Kein Zugriff"}), 403
     data = request.get_json()
     sid = data.get("spiel_id", "")
     heim_tore = int(data.get("heim", 0))
     gast_tore = int(data.get("gast", 0))
 
-    # Update cache to final with score
-    if sid not in live_scores_cache:
-        live_scores_cache[sid] = {}
-    live_scores_cache[sid]["status"] = "final"
-    live_scores_cache[sid]["heim"] = heim_tore
-    live_scores_cache[sid]["gast"] = gast_tore
+    entry = get_cache_entry(sid)
+    entry["status"] = "final"
+    entry["heim"] = heim_tore
+    entry["gast"] = gast_tore
+    persist_live_cache()
 
-    try:
-        with open(LIVESCORES_CACHE_FILE, 'w') as f:
-            json.dump(live_scores_cache, f)
-    except Exception as e:
-        print(f"[WARN] Cache nicht gespeichert: {e}")
-
-    # Auswertung
     results = do_auswertung(sid, heim_tore, gast_tore)
     print(f"[ADMIN] Abpfiff {sid} {heim_tore}:{gast_tore} — {len(results)} Tipps ausgewertet")
     for r in results:
@@ -2818,16 +2795,66 @@ def api_admin_finish():
 
     return jsonify({"ok": True, "count": len(results), "results": results})
 
-# Legacy URL compat
-@app.route('/auswertung')
-def auswertung():
-    if "username" not in session or session["username"] != ADMIN_USER:
-        return redirect(url_for('adminpanel'))
-    return redirect(url_for('adminpanel'))
+# ── API: Admin Account erstellen ───────────────────────────────
+@app.route('/api/admin/create_account', methods=['POST'])
+def api_admin_create_account():
+    if not is_admin_session():
+        return jsonify({"ok": False, "error": "Kein Zugriff"}), 403
+    data = request.get_json()
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+
+    if not username or len(password) < 4:
+        return jsonify({"ok": False, "error": "Name und Passwort (min. 4 Zeichen) erforderlich"})
+    if not re.match(r'^[A-Za-z0-9_]{3,16}$', username):
+        return jsonify({"ok": False, "error": "Ungültiger Minecraft-Name (3-16 Zeichen, Buchstaben/Zahlen/_)"})
+    if username in user_db:
+        return jsonify({"ok": False, "error": "Dieser Name existiert bereits"})
+
+    salt, pw_hash = hash_password(password)
+    user_db[username] = {
+        "points": 1000,
+        "tipps": {},
+        "lieblingsteam": None,
+        "registered": datetime.datetime.now().strftime("%d.%m.%Y"),
+        "salt": salt,
+        "pw_hash": pw_hash,
+        "is_admin": False
+    }
+    save_data()
+    print(f"[ADMIN] Neuer Account erstellt: {username}")
+    return jsonify({"ok": True})
+
+# ── API: Admin Passwort setzen/ändern ──────────────────────────
+@app.route('/api/admin/set_password', methods=['POST'])
+def api_admin_set_password():
+    if not is_admin_session():
+        return jsonify({"ok": False, "error": "Kein Zugriff"}), 403
+    data = request.get_json()
+    username = data.get("username") or ""
+    password = data.get("password") or ""
+
+    if username not in user_db:
+        return jsonify({"ok": False, "error": "Benutzer nicht gefunden"})
+    if len(password) < 4:
+        return jsonify({"ok": False, "error": "Passwort zu kurz (min. 4 Zeichen)"})
+
+    salt, pw_hash = hash_password(password)
+    user_db[username]["salt"] = salt
+    user_db[username]["pw_hash"] = pw_hash
+    save_data()
+    print(f"[ADMIN] Passwort geändert für: {username}")
+    return jsonify({"ok": True})
 
 @app.route('/admin')
 def admin_old():
-    if "username" not in session or session["username"] != ADMIN_USER:
+    if not is_admin_session():
+        return redirect(url_for('home'))
+    return redirect(url_for('adminpanel'))
+
+@app.route('/auswertung')
+def auswertung():
+    if not is_admin_session():
         return redirect(url_for('home'))
     return redirect(url_for('adminpanel'))
 
@@ -2843,6 +2870,7 @@ if __name__ == '__main__':
     print(f"   Daten: {os.path.abspath(DATA_FILE)}")
     print(f"   Live-Scores Cache: {os.path.abspath(LIVESCORES_CACHE_FILE)}")
     print(f"   Geladene Spieler: {len(user_db)}")
+    print(f"   Admin-Login: {ADMIN_USER} / {ADMIN_DEFAULT_PASSWORD} (bitte nach erstem Login ändern!)")
     print("   Starte auf: http://127.0.0.1:5005")
     print("="*60 + "\n")
     try:
